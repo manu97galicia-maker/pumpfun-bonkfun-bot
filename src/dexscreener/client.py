@@ -237,7 +237,7 @@ class DexScreenerClient:
         data = await self._get(
             f"/orders/v1/{chain}/{token_address}", self._limiter_60
         )
-        return _as_list(data)
+        return _flatten_orders(data)
 
     async def get_pair(
         self, pair_address: str, chain: str | None = None
@@ -381,6 +381,25 @@ def _as_list(data: Any) -> list[dict[str, Any]]:
     if isinstance(data, dict):
         return [data]
     return []
+
+
+def _flatten_orders(data: Any) -> list[dict[str, Any]]:
+    """Normalize the /orders/v1 response into a flat list of order dicts.
+
+    DexScreener's documented shape is a flat array of
+    ``{"type", "status", "paymentTimestamp"}`` objects, but the live API
+    can wrap them as ``[{"orders": [...], "boosts": [...]}]``. Handle both:
+    an item that carries a nested ``orders`` list is expanded; an item that
+    already looks like an order (has a ``type``) is kept as-is.
+    """
+    orders: list[dict[str, Any]] = []
+    for item in _as_list(data):
+        nested = item.get("orders")
+        if isinstance(nested, list):
+            orders.extend(o for o in nested if isinstance(o, dict))
+        elif "type" in item:
+            orders.append(item)
+    return orders
 
 
 def _extract_pairs(data: Any) -> list[dict[str, Any]]:
