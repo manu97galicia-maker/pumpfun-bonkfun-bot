@@ -20,6 +20,7 @@ from cleanup.modes import (
 from core.client import SolanaClient
 from core.priority_fee.manager import PriorityFeeManager
 from core.wallet import Wallet
+from dexscreener import DexScreenerFilter
 from interfaces.core import Platform, TokenInfo
 from monitoring.listener_factory import ListenerFactory
 from platforms import get_platform_implementations
@@ -96,6 +97,8 @@ class UniversalTrader:
         bro_address: str | None = None,
         marry_mode: bool = False,
         yolo_mode: bool = False,
+        # DexScreener buy filter (disabled unless configured)
+        dexscreener_config: dict | None = None,
         # Compute unit configuration
         compute_units: dict | None = None,
         # Node provider configuration
@@ -206,6 +209,9 @@ class UniversalTrader:
         self.marry_mode = marry_mode
         self.yolo_mode = yolo_mode
 
+        # DexScreener buy filter (no-op unless enabled in config)
+        self.dex_filter = DexScreenerFilter(dexscreener_config)
+
         # State tracking
         self.traded_mints: set[Pubkey] = set()
         self.traded_token_programs: dict[
@@ -227,6 +233,7 @@ class UniversalTrader:
         )
         logger.info(f"Marry mode: {self.marry_mode}")
         logger.info(f"YOLO mode: {self.yolo_mode}")
+        logger.info(self.dex_filter.describe())
         logger.info(f"Exit strategy: {self.exit_strategy}")
 
         if self.exit_strategy == "tp_sl":
@@ -365,6 +372,7 @@ class UniversalTrader:
         for key in old_keys:
             self.token_timestamps.pop(key, None)
 
+        await self.dex_filter.close()
         await self.solana_client.close()
 
     async def _queue_token(self, token_info: TokenInfo) -> None:
@@ -434,6 +442,12 @@ class UniversalTrader:
                     f"Waiting for {self.wait_time_after_creation} seconds for the pool/curve to stabilize..."
                 )
                 await asyncio.sleep(self.wait_time_after_creation)
+
+            # DexScreener buy filter (skips the buy if criteria not met)
+            if not await self.dex_filter.should_buy(
+                str(token_info.mint), token_info.symbol
+            ):
+                return
 
             # Buy token
             logger.info(

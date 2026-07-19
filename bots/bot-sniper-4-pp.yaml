@@ -72,6 +72,26 @@ filters:
   marry_mode: false # Only buy tokens, skip selling
   yolo_mode: false # Continuously trade tokens
 
+  # DexScreener buy filter (optional). Queries DexScreener before each buy.
+  # Disabled by default: with enabled=false nothing changes vs. before.
+  # NOTE: adds an HTTP round-trip per buy (latency). Brand-new pump.fun tokens
+  # are usually NOT indexed on DexScreener for the first seconds, so any
+  # market-data criterion (require_listed / min_liquidity_usd / ...) will skip
+  # most fresh snipes by design. Leave a criterion at 0/false to ignore it.
+  dexscreener:
+    enabled: false        # Master switch for the whole filter
+    enforce: true         # true = block the buy on fail; false = log-only (dry run)
+    block_on_error: true  # On timeout/API error: true = skip buy (fail-closed)
+    chain: "solana"       # DexScreener chain slug
+    require_dex_paid: false  # Require an approved paid DexScreener order (Dex Paid)
+    require_listed: false    # Require the token to already have a DexScreener pair
+    min_boosts: 0            # Minimum active boosts
+    min_liquidity_usd: 0     # Minimum pool liquidity in USD
+    min_volume_h24: 0        # Minimum 24h volume in USD
+    min_market_cap: 0        # Minimum market cap in USD
+    max_market_cap: 0        # Maximum market cap in USD (0 = no cap)
+    timeout_seconds: 5       # Max seconds to spend on the check
+
 # Retry and timeout settings
 retries:
   max_attempts: 1 # Number of attempts for transaction submission

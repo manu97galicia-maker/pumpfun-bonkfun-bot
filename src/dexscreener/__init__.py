@@ -14,9 +14,12 @@ from dexscreener.client import (
     DexScreenerClient,
     TokenMarketData,
 )
+from dexscreener.filter import DexScreenerFilter, FilterDecision
 
 __all__ = [
     "DexPaidStatus",
     "DexScreenerClient",
+    "DexScreenerFilter",
+    "FilterDecision",
     "TokenMarketData",
 ]
