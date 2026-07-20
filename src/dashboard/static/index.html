@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SNIPER BOT // control deck</title>
+<style>
+  :root {
+    --bg: #05070d;
+    --panel: #0b1020;
+    --panel-2: #0e1530;
+    --line: #1d2b52;
+    --ink: #cdd9ff;
+    --dim: #6b7bb0;
+    --cyan: #33e6ff;
+    --green: #3fff9f;
+    --red: #ff4d6d;
+    --amber: #ffd166;
+    --violet: #9b7bff;
+    --glow: 0 0 12px rgba(51, 230, 255, .35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(51,230,255,.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(155,123,255,.10), transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  .wrap { max-width: 1360px; margin: 0 auto; padding: 18px; }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    border: 1px solid var(--line); background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border-radius: 14px; padding: 14px 18px; box-shadow: var(--glow);
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .bot {
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: #08122b; border: 1px solid var(--line); font-size: 22px; box-shadow: inset 0 0 14px rgba(51,230,255,.25);
+  }
+  .title b { letter-spacing: 2px; }
+  .title small { color: var(--dim); letter-spacing: 3px; text-transform: uppercase; font-size: 10px; }
+  .live { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--dim); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+  /* KPI / results zone */
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 14px 0; }
+  .kpi { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 12px 14px; position: relative; overflow: hidden; }
+  .kpi::after { content:""; position:absolute; inset:0; background: linear-gradient(180deg, rgba(51,230,255,.06), transparent 45%); pointer-events:none; }
+  .kpi .k { color: var(--dim); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; }
+  .kpi .v { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .kpi .s { color: var(--dim); font-size: 11px; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .muted { color: var(--dim); }
+
+  /* Grid */
+  .grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .card { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; overflow: hidden; }
+  .card > h2 {
+    margin: 0; padding: 11px 14px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan);
+    border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--panel-2), transparent); display:flex; align-items:center; gap:8px;
+  }
+  .card > h2 .tag { margin-left:auto; color: var(--dim); font-size: 10px; letter-spacing: 1px; }
+  .body { padding: 6px 8px 10px; max-height: 340px; overflow-y: auto; }
+  .body.tall { max-height: 460px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; white-space: nowrap; }
+  th { color: var(--dim); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; position: sticky; top: 0; background: var(--panel); }
+  tbody tr { border-top: 1px solid #121a33; }
+  tbody tr:hover { background: #0d1530; }
+  .sym { color: #fff; font-weight: 700; }
+  .mint { color: var(--dim); font-size: 11px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .chip { display:inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; border:1px solid var(--line); color: var(--dim); }
+  .chip.pf { color: var(--green); border-color: #17482f; }
+  .chip.lb { color: var(--amber); border-color: #4a3d14; }
+
+  /* live feed rows */
+  .feed-row { display:flex; align-items:center; gap:10px; padding:8px; border-top:1px solid #121a33; animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: rgba(63,255,159,.14); } to { background: transparent; } }
+  .feed-row .price { margin-left:auto; text-align:right; }
+
+  /* alerts */
+  .alert { display:flex; gap:8px; padding:8px 12px; border-top:1px solid #121a33; align-items:flex-start; }
+  .alert .b { width:6px; align-self:stretch; border-radius:4px; }
+  .alert.danger .b { background: var(--red); } .alert.good .b { background: var(--green); } .alert.info .b { background: var(--cyan); }
+  .alert.danger { color:#ffd9e0; } .alert.good { color:#d6ffe9; }
+
+  /* forms */
+  .form { padding: 12px 14px; display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .form label { display:flex; flex-direction:column; gap:4px; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing:1px; }
+  input, select {
+    background:#070c1c; border:1px solid var(--line); color: var(--ink); border-radius:8px; padding:8px 10px; font-family:inherit; font-size:13px;
+  }
+  input:focus, select:focus { outline:none; border-color: var(--cyan); box-shadow: var(--glow); }
+  .btn {
+    background: linear-gradient(180deg, #12325a, #0c1f3d); color:#eaf6ff; border:1px solid #24507f; border-radius:8px;
+    padding:9px 14px; font-family:inherit; font-size:12px; letter-spacing:1px; text-transform:uppercase; cursor:pointer;
+  }
+  .btn:hover { border-color: var(--cyan); box-shadow: var(--glow); }
+  .btn.warn { background: linear-gradient(180deg, #4a1526, #2c0d18); border-color:#7d2740; color:#ffd9e0; }
+  .full { grid-column: 1 / -1; }
+  .analysis-out { padding: 4px 14px 14px; }
+  .big-net { font-size: 26px; font-weight: 800; }
+  .kv { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed #17203f; color: var(--dim); }
+  .kv b { color: var(--ink); }
+
+  /* wallet */
+  .wallet { padding: 12px 14px; display:flex; flex-direction:column; gap:12px; }
+  .addr { display:flex; gap:8px; align-items:center; background:#070c1c; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .addr code { color: var(--cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .bal { font-size: 30px; font-weight: 800; }
+  .note { color: var(--dim); font-size: 11px; }
+  .danger-note { color: var(--amber); font-size: 11px; border-left:3px solid var(--amber); padding-left:8px; }
+  .empty { color: var(--dim); text-align:center; padding: 22px; }
+
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .form { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <div class="bot">🤖</div>
+      <div class="title">
+        <b>SNIPER BOT</b> · CONTROL DECK<br />
+        <small>pump.fun / letsbonk · dexscreener-aware</small>
+      </div>
+    </div>
+    <div class="live"><span class="dot"></span> LIVE <span id="clock" class="muted"></span></div>
+  </header>
+
+  <!-- RESULTS ZONE -->
+  <section class="kpis" id="kpis"></section>
+
+  <div class="grid">
+    <div class="col">
+      <!-- LIVE BUYS -->
+      <div class="card">
+        <h2>◉ Monedas compradas — en directo <span class="tag" id="buys-tag"></span></h2>
+        <div class="body" id="live-buys"><div class="empty">esperando compras…</div></div>
+      </div>
+
+      <!-- OPEN POSITIONS -->
+      <div class="card">
+        <h2>▣ Posiciones abiertas <span class="tag" id="open-tag"></span></h2>
+        <div class="body tall" id="open-positions"><div class="empty">sin posiciones abiertas</div></div>
+      </div>
+
+      <!-- CLOSED / HISTORY -->
+      <div class="card">
+        <h2>⤢ Cerradas (historial) <span class="tag" id="closed-tag"></span></h2>
+        <div class="body" id="closed-positions"><div class="empty">sin historial</div></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <!-- ALERTS -->
+      <div class="card">
+        <h2>⚠ Avisos</h2>
+        <div class="body" id="alerts"><div class="empty">sin avisos</div></div>
+      </div>
+
+      <!-- STRATEGY ANALYSIS -->
+      <div class="card">
+        <h2>∿ Análisis de estrategias</h2>
+        <form class="form" id="analysis-form">
+          <label>Etiqueta
+            <input name="label" value="dex boost 500" />
+          </label>
+          <label>Coste por moneda (SOL)
+            <input name="cost_per_coin_sol" type="number" step="0.0000001" value="0.0005" />
+          </label>
+          <label>Plataforma
+            <select name="platform">
+              <option value="">todas</option>
+              <option value="pump_fun">pump_fun</option>
+              <option value="lets_bonk">lets_bonk</option>
+            </select>
+          </label>
+          <label>Inversión mínima (SOL)
+            <input name="min_invested_sol" type="number" step="0.0000001" value="0" />
+          </label>
+          <button class="btn full" type="submit">▶ Estudiar estrategia</button>
+        </form>
+        <div class="analysis-out" id="analysis-out"><div class="note">Introduce parámetros y pulsa estudiar. Ej: “rentabilidad media por moneda tras pagar dex boost 500”.</div></div>
+      </div>
+
+      <!-- WALLET -->
+      <div class="card">
+        <h2>◈ Wallet · depósito / retiro</h2>
+        <div class="wallet" id="wallet"><div class="note">cargando wallet…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note" style="text-align:center;margin:16px 0">
+    Panel local (127.0.0.1) · datos derivados de <code>trades/trades.log</code> y del RPC · trading real lo ejecuta el bot.
+  </p>
+</div>
+
+<script>
+const fmtSol = (v) => (v === null || v === undefined) ? "—" : (Math.abs(v) < 1e-6 && v !== 0 ? v.toExponential(2) : Number(v).toFixed(6));
+const fmtPct = (v) => (v === null || v === undefined) ? "—" : (v >= 0 ? "+" : "") + Number(v).toFixed(1) + "%";
+const cls = (v) => v > 0 ? "pos" : (v < 0 ? "neg" : "muted");
+const short = (m) => m ? m.slice(0,4) + "…" + m.slice(-4) : "";
+const plat = (p) => p === "lets_bonk" ? '<span class="chip lb">bonk</span>' : '<span class="chip pf">pump</span>';
+const when = (t) => t ? new Date(t).toLocaleTimeString() : "";
+const sx = (m) => `https://solscan.io/token/${m}`;
+
+function renderKpis(r) {
+  const items = [
+    { k: "Resultado neto", v: fmtSol(r.total_realized_sol) + " SOL", c: cls(r.total_realized_sol), s: "ROI " + fmtPct(r.roi_pct) },
+    { k: "Media / moneda", v: fmtSol(r.avg_pnl_per_coin_sol) + " SOL", c: cls(r.avg_pnl_per_coin_sol), s: r.closed_count + " cerradas" },
+    { k: "Win rate", v: Number(r.win_rate_pct).toFixed(0) + "%", c: r.win_rate_pct >= 50 ? "pos" : "neg", s: r.wins + "W / " + r.losses + "L" },
+    { k: "Abiertas", v: r.open_count, c: "muted", s: fmtSol(r.open_invested_sol) + " SOL exp." },
+    { k: "Invertido", v: fmtSol(r.total_invested_sol) + " SOL", c: "muted", s: "acumulado" },
+  ];
+  document.getElementById("kpis").innerHTML = items.map(i =>
+    `<div class="kpi"><div class="k">${i.k}</div><div class="v ${i.c}">${i.v}</div><div class="s">${i.s}</div></div>`
+  ).join("");
+}
+
+function renderLiveBuys(rows) {
+  document.getElementById("buys-tag").textContent = rows.length ? rows.length + " recientes" : "";
+  const el = document.getElementById("live-buys");
+  if (!rows.length) { el.innerHTML = '<div class="empty">esperando compras…</div>'; return; }
+  el.innerHTML = rows.map(b => `
+    <div class="feed-row">
+      <span class="sym">${b.symbol}</span> ${plat(b.platform)}
+      <a class="mint" href="${sx(b.mint)}" target="_blank">${short(b.mint)}</a>
+      <span class="price"><b>${fmtSol(b.spent_sol)} SOL</b><br><span class="muted">${when(b.timestamp)}</span></span>
+    </div>`).join("");
+}
+
+function posTable(rows, closed) {
+  if (!rows.length) return `<div class="empty">${closed ? "sin historial" : "sin posiciones abiertas"}</div>`;
+  const head = closed
+    ? `<tr><th>moneda</th><th>plat</th><th class="num">invertido</th><th class="num">P&L</th><th class="num">%</th><th class="num">hold</th></tr>`
+    : `<tr><th>moneda</th><th>plat</th><th class="num">invertido</th><th class="num">compras</th><th>entrada</th></tr>`;
+  const body = rows.map(p => closed
+    ? `<tr><td><span class="sym">${p.symbol}</span> <a class="mint" href="${sx(p.mint)}" target="_blank">${short(p.mint)}</a></td>
+         <td>${plat(p.platform)}</td>
+         <td class="num">${fmtSol(p.invested_sol)}</td>
+         <td class="num ${cls(p.realized_pnl_sol)}">${fmtSol(p.realized_pnl_sol)}</td>
+         <td class="num ${cls(p.realized_pnl_sol)}">${fmtPct(p.realized_pnl_pct)}</td>
+         <td class="num muted">${p.hold_seconds !== null ? p.hold_seconds.toFixed(0)+"s" : "—"}</td></tr>`
+    : `<tr><td><span class="sym">${p.symbol}</span> <a class="mint" href="${sx(p.mint)}" target="_blank">${short(p.mint)}</a></td>
+         <td>${plat(p.platform)}</td>
+         <td class="num">${fmtSol(p.invested_sol)}</td>
+         <td class="num">${p.n_buys}</td>
+         <td class="muted">${when(p.entry_time)}</td></tr>`
+  ).join("");
+  return `<table>${head}${body}</table>`;
+}
+
+function renderAlerts(rows) {
+  const el = document.getElementById("alerts");
+  if (!rows.length) { el.innerHTML = '<div class="empty">sin avisos</div>'; return; }
+  el.innerHTML = rows.map(a => `<div class="alert ${a.level}"><div class="b"></div><div>${a.text}</div></div>`).join("");
+}
+
+function renderWallet(w) {
+  const el = document.getElementById("wallet");
+  if (!w || !w.configured) { el.innerHTML = '<div class="note">Wallet no configurada (SOLANA_PRIVATE_KEY ausente en .env).</div>'; return; }
+  const wd = w.withdraw_enabled;
+  el.innerHTML = `
+    <div>
+      <div class="note">Balance</div>
+      <div class="bal ${w.balance_sol === null ? "muted" : ""}">${w.balance_sol === null ? "RPC n/d" : Number(w.balance_sol).toFixed(4)} <span class="note">SOL</span></div>
+    </div>
+    <div>
+      <div class="note">Dirección de depósito (envía SOL aquí)</div>
+      <div class="addr"><code id="wa">${w.address}</code><button class="btn" onclick="navigator.clipboard.writeText('${w.address}')">copiar</button></div>
+    </div>
+    <div>
+      <div class="note">Retirar SOL</div>
+      <div class="form" style="padding:8px 0">
+        <label class="full">Destino
+          <input id="wd-dest" placeholder="pubkey de destino" ${wd ? "" : "disabled"} />
+        </label>
+        <label>Cantidad (SOL)
+          <input id="wd-amt" type="number" step="0.0001" placeholder="0.0" ${wd ? "" : "disabled"} />
+        </label>
+        <button class="btn warn" ${wd ? "" : "disabled"} onclick="doWithdraw()">⤴ retirar</button>
+      </div>
+      ${wd
+        ? '<div class="danger-note">Movimiento de fondos REAL activado. Revisa destino y cantidad antes de confirmar.</div>'
+        : '<div class="note">Retiro desactivado. Actívalo con <code>DASHBOARD_ALLOW_WITHDRAW=true</code> (solo local).</div>'}
+      <div id="wd-result" class="note"></div>
+    </div>`;
+}
+
+async function doWithdraw() {
+  const destination = document.getElementById("wd-dest").value.trim();
+  const amount_sol = parseFloat(document.getElementById("wd-amt").value);
+  const out = document.getElementById("wd-result");
+  if (!destination || !(amount_sol > 0)) { out.textContent = "destino/cantidad inválidos"; return; }
+  if (!confirm(`Enviar ${amount_sol} SOL a ${destination}?`)) return;
+  out.textContent = "enviando…";
+  try {
+    const r = await fetch("/api/withdraw", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ destination, amount_sol }) });
+    const j = await r.json();
+    out.innerHTML = j.ok ? `<span class="pos">OK · <a href="https://solscan.io/tx/${j.signature}" target="_blank">tx</a></span>` : `<span class="neg">${j.error}</span>`;
+  } catch (e) { out.innerHTML = `<span class="neg">${e}</span>`; }
+}
+
+async function tick() {
+  document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+  try {
+    const r = await fetch("/api/state"); const s = await r.json();
+    renderKpis(s.results);
+    renderLiveBuys(s.live_buys);
+    document.getElementById("open-tag").textContent = s.open_positions.length || "";
+    document.getElementById("open-positions").innerHTML = posTable(s.open_positions, false);
+    document.getElementById("closed-tag").textContent = s.closed_positions.length || "";
+    document.getElementById("closed-positions").innerHTML = posTable(s.closed_positions, true);
+    renderAlerts(s.alerts);
+    renderWallet(s.wallet);
+  } catch (e) { /* keep last render */ }
+}
+
+document.getElementById("analysis-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  const params = {
+    label: f.get("label"),
+    cost_per_coin_sol: parseFloat(f.get("cost_per_coin_sol")) || 0,
+    platform: f.get("platform") || null,
+    min_invested_sol: parseFloat(f.get("min_invested_sol")) || 0,
+  };
+  const out = document.getElementById("analysis-out");
+  out.innerHTML = '<div class="note">calculando…</div>';
+  const r = await fetch("/api/analysis", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(params) });
+  const a = await r.json();
+  out.innerHTML = `
+    <div class="note">${a.label} · ${a.platform} · ${a.coins} monedas · coste ${fmtSol(a.cost_per_coin_sol)} SOL/moneda</div>
+    <div class="big-net ${cls(a.avg_net_pnl_per_coin_sol)}">${fmtSol(a.avg_net_pnl_per_coin_sol)} SOL</div>
+    <div class="note">media NETA por moneda (tras coste) · ${a.profitable_after_cost ? '<span class="pos">rentable</span>' : '<span class="neg">no rentable</span>'}</div>
+    <div class="kv"><span>media bruta / moneda</span><b class="${cls(a.avg_gross_pnl_per_coin_sol)}">${fmtSol(a.avg_gross_pnl_per_coin_sol)} SOL</b></div>
+    <div class="kv"><span>neto total</span><b class="${cls(a.total_net_pnl_sol)}">${fmtSol(a.total_net_pnl_sol)} SOL</b></div>
+    <div class="kv"><span>coste total</span><b>${fmtSol(a.total_cost_sol)} SOL</b></div>
+    <div class="kv"><span>win rate (neto)</span><b>${Number(a.win_rate_pct).toFixed(0)}%</b></div>
+    <div class="kv"><span>hold medio</span><b>${a.avg_hold_seconds !== null ? a.avg_hold_seconds+"s" : "—"}</b></div>`;
+});
+
+tick();
+setInterval(tick, 4000);
+</script>
+</body>
+</html>

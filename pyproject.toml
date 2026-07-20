@@ -30,6 +30,7 @@ dev = [
 
 [project.scripts]
 pump_bot = "bot_runner:main"
+dashboard = "dashboard.server:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
