@@ -208,7 +208,7 @@ class UniversalTrader:
                 (
                     take_profit_percentage,
                     take_profit_sell_percentage
-                    if take_profit_sell_percentage
+                    if take_profit_sell_percentage is not None
                     else 1.0,
                 ),
                 (tp2_gain, tp2_sell),
@@ -633,47 +633,67 @@ class UniversalTrader:
             f"SL={self.stop_loss_percentage} moonbag={moonbag*100:.0f}%"
         )
 
+        # Footgun guard: with no tiers, no stop-loss and no time backstop there
+        # is no exit condition — don't spin forever.
+        if not tiers and sl_price is None and not self.max_hold_time:
+            logger.warning(
+                "tp_sl exit for %s has no TP tiers, no stop-loss and no "
+                "max_hold_time — nothing to monitor; holding.",
+                token_info.symbol,
+            )
+            return
+
         pool_address = self._get_pool_address(token_info)
         curve_manager = self.platform_implementations.curve_manager
         start = monotonic()
+        fully_exited = False
 
         while remaining > 1e-9:
             try:
                 price = await curve_manager.calculate_price(pool_address)
 
-                # Stop loss: dump everything still held.
+                # Stop loss: dump everything still held, priced at the LIVE
+                # price so the on-chain slippage floor is realistic (using the
+                # entry price here makes the sell revert exactly at a loss).
                 if sl_price is not None and price <= sl_price:
                     logger.info(
                         f"STOP LOSS for {token_info.symbol} at {price:.8f} SOL "
                         f"(<= {sl_price:.8f})"
                     )
-                    await self._sell_amount(
-                        token_info, remaining, entry_price, "stop_loss"
+                    if await self._sell_amount(
+                        token_info, remaining, price, "stop_loss"
+                    ):
+                        remaining = 0.0
+                        fully_exited = True
+                        break
+                    logger.warning(
+                        "Stop-loss sell failed for %s; retrying", token_info.symbol
                     )
-                    remaining = 0.0
-                    break
+                    await asyncio.sleep(self.price_check_interval)
+                    continue
 
-                # Take-profit tiers that are now due.
+                # Take-profit tiers that are now due (priced at the LIVE price).
                 for i in tiers_due(entry_price, price, tiers, executed):
                     amount = min(original_qty * tiers[i].sell, remaining)
                     if amount <= 1e-9:
                         executed[i] = True
                         continue
                     reason = f"tp_tier{i + 1}_+{tiers[i].gain * 100:.0f}%"
-                    if await self._sell_amount(
-                        token_info, amount, entry_price, reason
-                    ):
+                    if await self._sell_amount(token_info, amount, price, reason):
                         executed[i] = True
                         remaining -= amount
 
+                if remaining <= 1e-9:
+                    fully_exited = True
+                    break
+
                 # All tiers done -> hold the moonbag and stop monitoring.
                 if tiers and all(executed):
-                    if remaining > 1e-9:
-                        logger.info(
-                            f"All TP tiers hit for {token_info.symbol} — "
-                            f"holding moonbag {moonbag * 100:.0f}% "
-                            f"({remaining:.6f} tokens)"
-                        )
+                    logger.info(
+                        f"All TP tiers hit for {token_info.symbol} — "
+                        f"holding moonbag {moonbag * 100:.0f}% "
+                        f"({remaining:.6f} tokens)"
+                    )
                     break
 
                 # Time backstop (optional).
@@ -682,17 +702,37 @@ class UniversalTrader:
                         f"Max hold time reached for {token_info.symbol}; "
                         f"selling remaining"
                     )
-                    await self._sell_amount(
-                        token_info, remaining, entry_price, "max_hold_time"
+                    if await self._sell_amount(
+                        token_info, remaining, price, "max_hold_time"
+                    ):
+                        remaining = 0.0
+                        fully_exited = True
+                        break
+                    logger.warning(
+                        "Max-hold sell failed for %s; retrying", token_info.symbol
                     )
-                    remaining = 0.0
-                    break
 
                 await asyncio.sleep(self.price_check_interval)
 
             except Exception:
                 logger.exception("Error in tiered exit monitor")
                 await asyncio.sleep(self.price_check_interval)
+
+        # Close the token account only after a FULL exit (not a held moonbag).
+        if fully_exited:
+            try:
+                await handle_cleanup_after_sell(
+                    self.solana_client,
+                    self.wallet,
+                    token_info.mint,
+                    token_info.token_program_id,
+                    self.priority_fee_manager,
+                    self.cleanup_mode,
+                    self.cleanup_with_priority_fee,
+                    self.cleanup_force_close_with_burn,
+                )
+            except Exception:
+                logger.exception("Cleanup after tiered exit failed")
 
     async def _handle_time_based_exit(
         self, token_info: TokenInfo, buy_result: TradeResult

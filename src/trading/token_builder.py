@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from solders.pubkey import Pubkey
 
-from core.pubkeys import SystemAddresses
 from interfaces.core import Platform, TokenInfo
 from utils.logger import get_logger
 
@@ -83,14 +82,21 @@ async def build_pumpfun_token_info(
         except (ValueError, TypeError):
             creator = None
 
-    # Determine the actual token program (owner of the mint account).
-    token_program_id = SystemAddresses.TOKEN_2022_PROGRAM
+    # Determine the actual token program (owner of the mint account). Do NOT
+    # guess: a wrong program derives the wrong ATA and the buy fails. If the
+    # mint account can't be read, skip this candidate.
+    token_program_id = None
     try:
         mint_acct = await client.get_account_info(mint)
         if mint_acct and getattr(mint_acct, "owner", None):
             token_program_id = mint_acct.owner
-    except Exception:  # noqa: BLE001 -- fall back to Token-2022 default
-        pass
+    except Exception:  # noqa: BLE001
+        token_program_id = None
+    if token_program_id is None:
+        logger.warning(
+            "Could not read token program for %s; skipping (won't guess)", mint_str
+        )
+        return None
 
     token_info = TokenInfo(
         name=name or symbol or str(mint),
