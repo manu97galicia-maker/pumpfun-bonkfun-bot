@@ -48,6 +48,9 @@ from dashboard.process_manager import REPO_ROOT, BotProcess
 
 STATIC_DIR = Path(__file__).parent / "static"
 LAMPORTS_PER_SOL = 1_000_000_000
+# Public RPC used only to read the wallet balance when no endpoint is
+# configured, so the dashboard can show a SOL balance out of the box.
+FALLBACK_RPC = "https://api.mainnet-beta.solana.com"
 # Kept back on every withdraw so the account keeps a working SOL buffer for
 # fees, rent and in-flight trades.
 WITHDRAW_FEE_RESERVE_SOL = 0.03
@@ -75,15 +78,22 @@ def _load_keypair() -> Any | None:
 
 
 async def _get_balance_sol(pubkey: Any) -> float | None:
-    """Query the wallet SOL balance via RPC. None if no RPC configured."""
-    rpc = os.getenv("SOLANA_NODE_RPC_ENDPOINT")
-    if not rpc:
-        return None
+    """Query the wallet SOL balance via RPC.
+
+    Uses the configured endpoint, falling back to a public RPC so the balance
+    shows even before the user sets SOLANA_NODE_RPC_ENDPOINT. Returns None only
+    if the query fails.
+    """
+    rpc = os.getenv("SOLANA_NODE_RPC_ENDPOINT") or FALLBACK_RPC
     from solana.rpc.async_api import AsyncClient
 
-    async with AsyncClient(rpc) as client:
-        resp = await client.get_balance(pubkey)
-        return resp.value / LAMPORTS_PER_SOL
+    try:
+        async with AsyncClient(rpc) as client:
+            resp = await client.get_balance(pubkey)
+            return resp.value / LAMPORTS_PER_SOL
+    except Exception as exc:  # noqa: BLE001 -- show n/d rather than crash
+        logger.warning("Balance query failed: %s", exc)
+        return None
 
 
 def _build_alerts(positions: dict[str, list[dict]], summary: dict) -> list[dict]:
