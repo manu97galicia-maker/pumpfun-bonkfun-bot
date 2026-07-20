@@ -57,6 +57,21 @@ def _safe_path(name: str, config_dir: str | Path = CONFIG_DIR) -> Path:
     return path
 
 
+DEXSCREENER_FIELDS: dict[str, type] = {
+    "enabled": bool,
+    "enforce": bool,
+    "block_on_error": bool,
+    "require_dex_paid": bool,
+    "require_listed": bool,
+    "min_boosts": float,
+    "min_liquidity_usd": float,
+    "min_volume_h24": float,
+    "min_market_cap": float,
+    "max_market_cap": float,
+    "timeout_seconds": int,
+}
+
+
 def read_strategy(name: str, config_dir: str | Path = CONFIG_DIR) -> dict[str, Any]:
     """Read the current strategy values from a bot config.
 
@@ -166,3 +181,78 @@ def update_strategy(
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return read_strategy(name, config_dir)
+
+
+def _indent_of(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def update_dexscreener(
+    name: str, updates: dict[str, Any], config_dir: str | Path = CONFIG_DIR
+) -> dict[str, Any]:
+    """Edit the ``filters.dexscreener`` block of a config (indent-aware).
+
+    Args:
+        name: Config filename.
+        updates: ``{field: value}`` for keys in :data:`DEXSCREENER_FIELDS`.
+        config_dir: Directory holding the configs.
+
+    Returns:
+        The re-read dexscreener values after the update.
+    """
+    unknown = set(updates) - set(DEXSCREENER_FIELDS)
+    if unknown:
+        msg = f"Unknown dexscreener fields: {sorted(unknown)}"
+        raise ValueError(msg)
+
+    path = _safe_path(name, config_dir)
+    lines = path.read_text(encoding="utf-8").splitlines()
+
+    header = None
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*dexscreener:\s*(#.*)?$", line):
+            header = i
+            break
+    if header is None:
+        msg = "No `dexscreener:` block found in config"
+        raise ValueError(msg)
+
+    header_indent = _indent_of(lines[header])
+    end = len(lines)
+    child_indent = header_indent + 2
+    insert_at = header + 1
+    for j in range(header + 1, len(lines)):
+        stripped = lines[j].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if _indent_of(lines[j]) <= header_indent:
+            end = j
+            break
+        child_indent = _indent_of(lines[j])
+        insert_at = j + 1
+    pad = " " * child_indent
+
+    to_insert: list[str] = []
+    for key, value in updates.items():
+        formatted = _format_value(value, DEXSCREENER_FIELDS[key])
+        pattern = re.compile(
+            rf"^(\s*)(#\s*)?{re.escape(key)}\s*:\s*([^#]*?)(\s+#.*)?$"
+        )
+        replaced = False
+        for k in range(header + 1, end):
+            m = pattern.match(lines[k])
+            if m:
+                comment = m.group(4) or ""
+                lines[k] = f"{pad}{key}: {formatted}{comment}"
+                replaced = True
+                break
+        if not replaced:
+            to_insert.append(f"{pad}{key}: {formatted}")
+
+    for offset, new_line in enumerate(to_insert):
+        lines.insert(insert_at + offset, new_line)
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    dex = data.get("filters", {}).get("dexscreener", {})
+    return {"name": name, "dexscreener": {k: dex.get(k) for k in DEXSCREENER_FIELDS}}

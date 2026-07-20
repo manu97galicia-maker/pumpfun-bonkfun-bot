@@ -127,6 +127,15 @@
   .import-row { display:flex; gap:10px; align-items:flex-end; }
   .import-row label { display:flex; flex-direction:column; gap:4px; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; }
   .import-row input { width:90px; }
+  .strat { padding:12px 14px; display:flex; flex-direction:column; gap:12px; }
+  .strat-cfg { display:flex; flex-direction:column; gap:4px; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; }
+  .cmd { background:#070c1c; border:1px solid var(--line); border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .cmd-row { display:flex; gap:8px; }
+  .cmd-row input { flex:1; }
+  .strat-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px 10px; }
+  .strat-grid label { display:flex; flex-direction:column; gap:3px; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
+  .strat-grid .wide { grid-column:1 / -1; }
+  .act { color:var(--green); } .act-dex { color:var(--cyan); }
 
   @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .form { grid-template-columns:1fr; } .strip { flex-wrap:wrap; } .strip .cell { min-width:50%; } }
   @media (prefers-reduced-motion: reduce) { .dot, .feed-row.fresh { animation: none; } }
@@ -191,6 +200,25 @@
           <button class="btn full" type="submit">▶ Estudiar estrategia</button>
         </form>
         <div class="analysis-out" id="analysis-out"><div class="note">Introduce parámetros y pulsa estudiar. Ej: “rentabilidad media por moneda tras pagar dex boost 500”.</div></div>
+      </div>
+      <div class="card">
+        <h2>⚙ Estrategia y órdenes <span class="tag" id="cfg-tag"></span></h2>
+        <div class="strat">
+          <label class="strat-cfg">Config del bot
+            <select id="cfg-select" onchange="loadConfig()"></select>
+          </label>
+          <div class="cmd">
+            <div class="note">Dale órdenes por escrito:</div>
+            <div class="cmd-row">
+              <input id="cmd-text" placeholder="ej: compra cuando dex paid · tp 40% vende 80% · sl 18%" onkeydown="if(event.key==='Enter')sendCommand()" />
+              <button class="btn" onclick="sendCommand()">▶ Enviar</button>
+            </div>
+            <div id="cmd-out" class="note"></div>
+          </div>
+          <div class="strat-grid" id="strat-grid"></div>
+          <button class="btn full" onclick="saveStrategy()">💾 Guardar estrategia</button>
+          <div id="strat-out" class="note"></div>
+        </div>
       </div>
       <div class="card">
         <h2>◈ Wallet · depósito / retiro</h2>
@@ -345,6 +373,79 @@ function renderWallet(w) {
       <div id="wd-result" class="note"></div></div>`;
 }
 
+let CONFIGS = [];
+async function loadConfigs() {
+  try {
+    const r = await fetch("/api/configs"); const j = await r.json();
+    CONFIGS = j.configs || [];
+    const sel = document.getElementById("cfg-select");
+    if (sel.options.length !== CONFIGS.length) {
+      sel.innerHTML = CONFIGS.map((c,i) => `<option value="${i}">${c.bot_name} (${c.platform}${c.enabled?"":" · off"})</option>`).join("");
+    }
+    document.getElementById("cfg-tag").textContent = CONFIGS.length + " bots";
+    if (CONFIGS.length && !document.getElementById("strat-grid").dataset.loaded) loadConfig();
+  } catch (e) {}
+}
+function currentCfg() { return CONFIGS[parseInt(document.getElementById("cfg-select").value) || 0]; }
+function pct(v) { return v == null ? "" : Math.round(v * 100); }
+function loadConfig() {
+  const c = currentCfg(); if (!c) return;
+  const t = c.trade;
+  const F = [
+    ["exit_strategy","Estrategia","text",t.exit_strategy||"tp_sl","wide"],
+    ["take_profit_percentage","TP1 sube %","num",pct(t.take_profit_percentage)],
+    ["take_profit_sell_percentage","TP1 vende %","num",pct(t.take_profit_sell_percentage)],
+    ["tp2_gain","TP2 sube % (x2=100)","num",pct(t.tp2_gain)],
+    ["tp2_sell","TP2 vende %","num",pct(t.tp2_sell)],
+    ["tp3_gain","TP3 sube % (x5=400)","num",pct(t.tp3_gain)],
+    ["tp3_sell","TP3 vende %","num",pct(t.tp3_sell)],
+    ["stop_loss_percentage","Stop loss %","num",pct(t.stop_loss_percentage)],
+    ["buy_slippage","Slippage compra %","num",pct(t.buy_slippage)],
+    ["sell_slippage","Slippage venta %","num",pct(t.sell_slippage)],
+    ["buy_amount","Compra SOL/token","num",t.buy_amount ?? "", "wide"],
+  ];
+  document.getElementById("strat-grid").innerHTML = F.map(([k,lab,typ,val,cls]) =>
+    `<label class="${cls||""}">${lab}<input data-k="${k}" type="${typ}" value="${val}" step="any" /></label>`).join("");
+  document.getElementById("strat-grid").dataset.loaded = "1";
+  document.getElementById("strat-out").textContent = "";
+}
+async function saveStrategy() {
+  const c = currentCfg(); if (!c) return;
+  const inputs = document.querySelectorAll("#strat-grid input");
+  const trade = {};
+  inputs.forEach(inp => {
+    const k = inp.dataset.k, raw = inp.value.trim();
+    if (raw === "") return;
+    if (k === "exit_strategy") { trade[k] = raw; return; }
+    if (k === "buy_amount") { trade[k] = parseFloat(raw); return; }
+    trade[k] = parseFloat(raw) / 100;  // percents -> fractions
+  });
+  const out = document.getElementById("strat-out");
+  out.textContent = "guardando…";
+  try {
+    const r = await fetch("/api/config", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ file: c.name, trade }) });
+    const j = await r.json();
+    out.innerHTML = j.ok ? '<span class="pos">Guardado ✓ (reinicia el bot para aplicar)</span>' : `<span class="neg">${j.error}</span>`;
+    await loadConfigsForce();
+  } catch (e) { out.innerHTML = `<span class="neg">${e}</span>`; }
+}
+async function loadConfigsForce() { document.getElementById("strat-grid").dataset.loaded=""; await loadConfigs(); }
+async function sendCommand() {
+  const c = currentCfg(); if (!c) return;
+  const text = document.getElementById("cmd-text").value.trim();
+  const out = document.getElementById("cmd-out");
+  if (!text) return;
+  out.textContent = "interpretando…";
+  try {
+    const r = await fetch("/api/command", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ file: c.name, text }) });
+    const j = await r.json();
+    if (!j.ok) { out.innerHTML = `<span class="neg">${j.note || j.error}</span>`; return; }
+    out.innerHTML = "Aplicado ✓ " + j.actions.map(a => `<span class="${a.scope==='dexscreener'?'act-dex':'act'}">• ${a.human}</span>`).join(" ");
+    document.getElementById("cmd-text").value = "";
+    await loadConfigsForce();
+  } catch (e) { out.innerHTML = `<span class="neg">${e}</span>`; }
+}
+
 async function importWallet() {
   const mnemonic = document.getElementById("mn").value.trim();
   const account = parseInt(document.getElementById("mn-acct").value) || 0;
@@ -463,6 +564,7 @@ document.getElementById("analysis-form").addEventListener("submit", async (ev) =
 });
 
 tick();
+loadConfigs();
 setInterval(tick, REFRESH_MS);
 setInterval(heartbeat, 1000);
 window.addEventListener("resize", () => { /* redraw handled next tick */ });

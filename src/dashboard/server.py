@@ -240,6 +240,89 @@ async def handle_wallet_import(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "address": derived["pubkey"]})
 
 
+async def handle_configs(request: web.Request) -> web.Response:
+    """List bot configs with their current strategy + filter values."""
+    from dashboard.config_editor import (
+        DEXSCREENER_FIELDS,
+        list_configs,
+        read_strategy,
+    )
+    import yaml
+
+    out = []
+    for name in list_configs():
+        strat = read_strategy(name)
+        data = yaml.safe_load((Path("bots") / name).read_text(encoding="utf-8")) or {}
+        dex = data.get("filters", {}).get("dexscreener", {}) or {}
+        out.append(
+            {
+                **strat,
+                "enabled": data.get("enabled", True),
+                "platform": data.get("platform", "pump_fun"),
+                "dexscreener": {k: dex.get(k) for k in DEXSCREENER_FIELDS},
+            }
+        )
+    return web.json_response({"configs": out})
+
+
+async def handle_config_update(request: web.Request) -> web.Response:
+    """Apply strategy and/or dexscreener updates to a config. Localhost only."""
+    blocked = _require_localhost(request)
+    if blocked:
+        return blocked
+    from dashboard.config_editor import update_dexscreener, update_strategy
+
+    try:
+        body = await request.json()
+        name = str(body["file"])
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return web.json_response({"ok": False, "error": "Expected {file, ...}"}, status=400)
+    try:
+        result: dict[str, Any] = {"ok": True, "file": name}
+        if body.get("trade"):
+            result["trade"] = update_strategy(name, body["trade"])["trade"]
+        if body.get("dexscreener"):
+            result["dexscreener"] = update_dexscreener(name, body["dexscreener"])["dexscreener"]
+    except ValueError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    return web.json_response(result)
+
+
+async def handle_command(request: web.Request) -> web.Response:
+    """Interpret a written order and apply it to a config. Localhost only."""
+    blocked = _require_localhost(request)
+    if blocked:
+        return blocked
+    from dashboard.command_interpreter import interpret
+    from dashboard.config_editor import update_dexscreener, update_strategy
+
+    try:
+        body = await request.json()
+        name = str(body["file"])
+        text = str(body["text"])
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return web.json_response(
+            {"ok": False, "error": "Expected {file, text}"}, status=400
+        )
+
+    plan = interpret(text)
+    if not plan["matched"]:
+        return web.json_response({"ok": False, "note": plan["note"], "actions": []})
+
+    trade_updates = {a["field"]: a["value"] for a in plan["actions"] if a["scope"] == "trade"}
+    dex_updates = {a["field"]: a["value"] for a in plan["actions"] if a["scope"] == "dexscreener"}
+    try:
+        if trade_updates:
+            update_strategy(name, trade_updates)
+        if dex_updates:
+            update_dexscreener(name, dex_updates)
+    except ValueError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    return web.json_response(
+        {"ok": True, "actions": plan["actions"], "applied_to": name}
+    )
+
+
 async def _wallet_info() -> dict[str, Any]:
     """Wallet panel data: deposit address + live balance."""
     keypair = _load_keypair()
@@ -356,6 +439,9 @@ def create_app(trades_log: str | Path | None = None) -> web.Application:
     app.router.add_post("/api/bot/start", handle_bot_start)
     app.router.add_post("/api/bot/stop", handle_bot_stop)
     app.router.add_post("/api/wallet/import", handle_wallet_import)
+    app.router.add_get("/api/configs", handle_configs)
+    app.router.add_post("/api/config", handle_config_update)
+    app.router.add_post("/api/command", handle_command)
     return app
 
 
