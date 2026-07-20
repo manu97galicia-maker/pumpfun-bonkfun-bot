@@ -144,6 +144,14 @@
   .strat-grid label { display:flex; flex-direction:column; gap:3px; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
   .strat-grid .wide { grid-column:1 / -1; }
   .act { color:var(--green); } .act-dex { color:var(--cyan); }
+  .order-item { border-top:1px solid #121a33; padding:10px 12px; }
+  .order-item:first-child { border-top:none; }
+  .order-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .order-line { color:var(--dim); font-size:12px; padding:1px 0; }
+  .order-line b { color:var(--ink); }
+  .cmd-history { display:flex; flex-direction:column; gap:4px; margin-top:4px; }
+  .cmd-history .h { font-size:11px; color:var(--dim); border-left:2px solid var(--cyan); padding-left:8px; }
+  .cmd-history .h b { color:var(--ink); }
   .login-overlay { position:fixed; inset:0; background:rgba(3,5,10,.94); display:none; align-items:center; justify-content:center; z-index:60; }
   .login-overlay.show { display:flex; }
   .login-box { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:26px 24px; width:290px; box-shadow:var(--glow); display:flex; flex-direction:column; gap:12px; }
@@ -227,6 +235,10 @@
         <div class="analysis-out" id="analysis-out"><div class="note">Introduce parámetros y pulsa estudiar. Ej: “rentabilidad media por moneda tras pagar dex boost 500”.</div></div>
       </div>
       <div class="card">
+        <h2>📋 Órdenes activas — qué está ejecutando cada bot</h2>
+        <div class="body" id="active-orders" style="max-height:none"><div class="empty">cargando…</div></div>
+      </div>
+      <div class="card">
         <h2>⚙ Estrategia y órdenes <span class="tag" id="cfg-tag"></span></h2>
         <div class="strat">
           <label class="strat-cfg">Config del bot
@@ -239,6 +251,7 @@
               <button class="btn" onclick="sendCommand()">▶ Enviar</button>
             </div>
             <div id="cmd-out" class="note"></div>
+            <div id="cmd-history" class="cmd-history"></div>
           </div>
           <div class="strat-grid" id="strat-grid"></div>
           <button class="btn full" onclick="saveStrategy()">💾 Guardar estrategia</button>
@@ -412,7 +425,44 @@ async function loadConfigs() {
     }
     document.getElementById("cfg-tag").textContent = CONFIGS.length + " bots";
     if (CONFIGS.length && !document.getElementById("strat-grid").dataset.loaded) loadConfig();
+    renderActiveOrders();
   } catch (e) {}
+}
+
+function orderSummary(c) {
+  const t = c.trade || {}, d = c.dexscreener || {};
+  const buy = t.buy_amount != null ? `${t.buy_amount} SOL/token` : "¿? SOL";
+  const platform = c.platform === "lets_bonk" ? "letsbonk" : "pump.fun";
+  const filt = [];
+  if (d.enabled) {
+    if (d.require_dex_paid) filt.push("dex paid");
+    if (d.min_boosts) filt.push("boosts≥" + d.min_boosts);
+    if (d.min_liquidity_usd) filt.push("liq≥$" + d.min_liquidity_usd);
+    if (d.min_market_cap) filt.push("mcap≥$" + d.min_market_cap);
+    if (d.require_liquidity_locked) filt.push("liquidez bloqueada≥" + (d.min_lp_locked_pct || 50) + "%");
+  }
+  const filtStr = d.enabled ? (filt.length ? filt.join(" + ") : "sin criterios") : "sin filtro";
+  const tiers = [];
+  if (t.take_profit_percentage) tiers.push(`vende ${pct(t.take_profit_sell_percentage) ?? 100}% al +${pct(t.take_profit_percentage)}%`);
+  if (t.tp2_gain) tiers.push(`${pct(t.tp2_sell)}% al +${pct(t.tp2_gain)}%`);
+  if (t.tp3_gain) tiers.push(`${pct(t.tp3_sell)}% al +${pct(t.tp3_gain)}%`);
+  const tpStr = t.exit_strategy === "tp_sl" ? (tiers.length ? tiers.join(" · ") + " · resto hold" : "TP/SL") : (t.exit_strategy || "?");
+  const sl = t.stop_loss_percentage ? `SL -${pct(t.stop_loss_percentage)}%` : "sin SL";
+  return { buy, platform, filtStr, tpStr, sl };
+}
+function renderActiveOrders() {
+  const el = document.getElementById("active-orders"); if (!el) return;
+  if (!CONFIGS.length) { el.innerHTML = '<div class="empty">sin bots</div>'; return; }
+  el.innerHTML = CONFIGS.map(c => {
+    const s = orderSummary(c), on = c.enabled;
+    return `<div class="order-item">
+      <div class="order-head"><span class="sym">${c.bot_name}</span> <span class="chip ${c.platform === "lets_bonk" ? "lb" : "pf"}">${s.platform}</span>
+        <span class="pill ${on ? "on" : "off"}" style="margin-left:auto">${on ? "ACTIVO" : "OFF"}</span></div>
+      <div class="order-line">🛒 Compra <b>${s.buy}</b></div>
+      <div class="order-line">🔎 Filtro: <b>${s.filtStr}</b></div>
+      <div class="order-line">🎯 Salida: <b>${s.tpStr}</b> · <b>${s.sl}</b></div>
+    </div>`;
+  }).join("");
 }
 function currentCfg() { return CONFIGS[parseInt(document.getElementById("cfg-select").value) || 0]; }
 function pct(v) { return v == null ? "" : Math.round(v * 100); }
@@ -469,6 +519,9 @@ async function sendCommand() {
     const j = await r.json();
     if (!j.ok) { out.innerHTML = `<span class="neg">${j.note || j.error}</span>`; return; }
     out.innerHTML = "Aplicado ✓ " + j.actions.map(a => `<span class="${a.scope==='dexscreener'?'act-dex':'act'}">• ${a.human}</span>`).join(" ");
+    const hist = document.getElementById("cmd-history");
+    const now = new Date().toLocaleTimeString();
+    hist.insertAdjacentHTML("afterbegin", `<div class="h"><b>“${text}”</b> → ${j.actions.map(a=>a.human).join(", ")} <span class="muted">(${now})</span></div>`);
     document.getElementById("cmd-text").value = "";
     await loadConfigsForce();
   } catch (e) { out.innerHTML = `<span class="neg">${e}</span>`; }

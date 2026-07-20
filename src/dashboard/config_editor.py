@@ -68,6 +68,8 @@ DEXSCREENER_FIELDS: dict[str, type] = {
     "min_volume_h24": float,
     "min_market_cap": float,
     "max_market_cap": float,
+    "require_liquidity_locked": bool,
+    "min_lp_locked_pct": float,
     "timeout_seconds": int,
 }
 
