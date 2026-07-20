@@ -40,6 +40,13 @@
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.4s infinite; }
   .dot.off { background: var(--red); box-shadow: 0 0 10px var(--red); animation: none; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+  .botctl { display:flex; align-items:center; gap:10px; padding-left:16px; border-left:1px solid var(--line); }
+  .pill { padding:3px 10px; border-radius:999px; font-size:10px; letter-spacing:1px; text-transform:uppercase; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+  .pill.on { color:var(--green); border-color:#17482f; box-shadow:0 0 10px rgba(63,255,159,.25); }
+  .pill.off { color:var(--red); border-color:#4a1526; }
+  .btn.go { background:linear-gradient(180deg,#12492f,#0b2c1c); border-color:#1e7d4a; color:#d6ffe9; }
+  .btn.stop { background:linear-gradient(180deg,#4a1526,#2c0d18); border-color:#7d2740; color:#ffd9e0; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
 
   /* status strip below header */
   .strip { display:flex; gap:0; border:1px solid var(--line); border-top:none; border-radius:0 0 14px 14px; overflow:hidden; margin-bottom:14px; }
@@ -111,6 +118,15 @@
   .note { color: var(--dim); font-size: 11px; }
   .danger-note { color: var(--amber); font-size: 11px; border-left:3px solid var(--amber); padding-left:8px; }
   .empty { color: var(--dim); text-align:center; padding: 22px; }
+  .import { border-top:1px solid var(--line); }
+  .import > summary { cursor:pointer; padding:10px 14px; color:var(--cyan); font-size:11px; letter-spacing:1px; text-transform:uppercase; list-style:none; }
+  .import > summary::-webkit-details-marker { display:none; }
+  .import-body { padding:0 14px 14px; display:flex; flex-direction:column; gap:10px; }
+  .import-body textarea { background:#070c1c; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:8px 10px; font-family:inherit; font-size:13px; resize:vertical; width:100%; }
+  .import-body textarea:focus { outline:none; border-color:var(--cyan); box-shadow:var(--glow); }
+  .import-row { display:flex; gap:10px; align-items:flex-end; }
+  .import-row label { display:flex; flex-direction:column; gap:4px; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; }
+  .import-row input { width:90px; }
 
   @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .form { grid-template-columns:1fr; } .strip { flex-wrap:wrap; } .strip .cell { min-width:50%; } }
   @media (prefers-reduced-motion: reduce) { .dot, .feed-row.fresh { animation: none; } }
@@ -127,6 +143,10 @@
       <div class="item">actualizado<br><b id="last-update">—</b></div>
       <div class="item">refresco<br><b id="countdown">—</b></div>
       <div class="conn"><span class="dot" id="conn-dot"></span> <b id="conn-text">LIVE</b></div>
+      <div class="botctl">
+        <span class="pill" id="bot-pill">bot: —</span>
+        <button class="btn" id="bot-btn" onclick="toggleBot()" disabled>—</button>
+      </div>
     </div>
   </header>
 
@@ -175,6 +195,18 @@
       <div class="card">
         <h2>◈ Wallet · depósito / retiro</h2>
         <div class="wallet" id="wallet"><div class="note">cargando wallet…</div></div>
+        <details class="import">
+          <summary>⇩ Importar wallet (12 / 24 palabras)</summary>
+          <div class="import-body">
+            <textarea id="mn" rows="3" placeholder="palabra1 palabra2 palabra3 … (frase semilla de 12 o 24 palabras, separadas por espacios)"></textarea>
+            <div class="import-row">
+              <label>Cuenta (índice)<input id="mn-acct" type="number" min="0" value="0" /></label>
+              <button class="btn warn" onclick="importWallet()">Importar y activar</button>
+            </div>
+            <div class="danger-note">La clave derivada (ruta Phantom m/44'/501'/0'/0') se guarda en <code>.env</code> y pasa a ser la wallet del bot. La frase NO se guarda. Reinicia el bot para operar con ella.</div>
+            <div id="mn-result" class="note"></div>
+          </div>
+        </details>
       </div>
     </div>
   </div>
@@ -313,6 +345,25 @@ function renderWallet(w) {
       <div id="wd-result" class="note"></div></div>`;
 }
 
+async function importWallet() {
+  const mnemonic = document.getElementById("mn").value.trim();
+  const account = parseInt(document.getElementById("mn-acct").value) || 0;
+  const out = document.getElementById("mn-result");
+  const words = mnemonic.split(/\s+/).filter(Boolean).length;
+  if (words !== 12 && words !== 24) { out.innerHTML = '<span class="neg">Introduce 12 o 24 palabras (' + words + ' detectadas)</span>'; return; }
+  if (!confirm("¿Importar esta wallet? Sustituirá la clave actual en .env y será la wallet del bot.")) return;
+  out.textContent = "derivando…";
+  try {
+    const r = await fetch("/api/wallet/import", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ mnemonic, account }) });
+    const j = await r.json();
+    if (j.ok) {
+      out.innerHTML = `<span class="pos">Importada ✓ ${j.address}</span>`;
+      document.getElementById("mn").value = "";
+      await tick();
+    } else { out.innerHTML = `<span class="neg">${j.error}</span>`; }
+  } catch (e) { out.innerHTML = `<span class="neg">${e}</span>`; }
+}
+
 async function doWithdraw() {
   const destination = document.getElementById("wd-dest").value.trim();
   const amount_sol = parseFloat(document.getElementById("wd-amt").value);
@@ -333,6 +384,39 @@ function setConn(ok) {
   document.getElementById("conn-text").textContent = ok ? "LIVE" : "SIN CONEXIÓN";
 }
 
+let botRunning = false, botBusy = false;
+function renderBot(b) {
+  botRunning = !!(b && b.running);
+  const pill = document.getElementById("bot-pill");
+  const btn = document.getElementById("bot-btn");
+  if (botRunning) {
+    const up = b.uptime_seconds != null ? Math.floor(b.uptime_seconds) + "s" : "";
+    pill.className = "pill on"; pill.textContent = `bot: ON · pid ${b.pid} · ${up}`;
+    btn.className = "btn stop"; btn.textContent = "■ STOP";
+  } else {
+    pill.className = "pill off";
+    pill.textContent = "bot: OFF" + (b && b.last_exit_code != null ? ` · exit ${b.last_exit_code}` : "");
+    btn.className = "btn go"; btn.textContent = "▶ START";
+  }
+  btn.disabled = botBusy;
+}
+
+async function toggleBot() {
+  if (botBusy) return;
+  if (!botRunning && !confirm("¿ARRANCAR el bot? Empezará a operar con SOL REAL según tus configs en bots/*.yaml.")) return;
+  if (botRunning && !confirm("¿PARAR el bot? Se cerrarán todos los procesos de trading.")) return;
+  botBusy = true;
+  const btn = document.getElementById("bot-btn");
+  btn.disabled = true; btn.textContent = botRunning ? "parando…" : "arrancando…";
+  try {
+    const r = await fetch(botRunning ? "/api/bot/stop" : "/api/bot/start", { method: "POST" });
+    const j = await r.json();
+    if (j.error) alert("Bot: " + j.error);
+  } catch (e) { alert("Bot: " + e); }
+  botBusy = false;
+  await tick();
+}
+
 async function tick() {
   try {
     const r = await fetch("/api/state"); const s = await r.json();
@@ -347,6 +431,7 @@ async function tick() {
     document.getElementById("closed-positions").innerHTML = posTable(s.closed_positions, true);
     renderAlerts(s.alerts);
     renderWallet(s.wallet);
+    renderBot(s.bot);
   } catch (e) { setConn(false); }
 }
 

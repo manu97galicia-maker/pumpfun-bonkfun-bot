@@ -28,11 +28,14 @@ Environment (loaded from the same .env the bot uses):
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
+
+logger = logging.getLogger(__name__)
 
 from dashboard.analytics import (
     build_positions,
@@ -41,6 +44,7 @@ from dashboard.analytics import (
     strategy_analysis,
     summarize,
 )
+from dashboard.process_manager import REPO_ROOT, BotProcess
 
 STATIC_DIR = Path(__file__).parent / "static"
 LAMPORTS_PER_SOL = 1_000_000_000
@@ -150,8 +154,90 @@ async def handle_state(request: web.Request) -> web.Response:
         "live_buys": live_buys(trades, limit=30),
         "alerts": _build_alerts(positions, summary),
         "wallet": await _wallet_info(),
+        "bot": request.app["bot"].status(),
     }
     return web.json_response(state)
+
+
+def _require_localhost(request: web.Request) -> web.Response | None:
+    """Reject non-localhost callers. Returns an error response or None."""
+    peer = request.transport.get_extra_info("peername")
+    if not peer or peer[0] not in ("127.0.0.1", "::1"):
+        return web.json_response({"ok": False, "error": "Local requests only"}, status=403)
+    return None
+
+
+async def handle_bot_status(request: web.Request) -> web.Response:
+    """Return the bot process status."""
+    return web.json_response(request.app["bot"].status())
+
+
+async def handle_bot_start(request: web.Request) -> web.Response:
+    """Start the trading bot (real trading). Localhost only."""
+    blocked = _require_localhost(request)
+    if blocked:
+        return blocked
+    return web.json_response({"ok": True, **request.app["bot"].start()})
+
+
+async def handle_bot_stop(request: web.Request) -> web.Response:
+    """Stop the trading bot. Localhost only."""
+    blocked = _require_localhost(request)
+    if blocked:
+        return blocked
+    return web.json_response({"ok": True, **request.app["bot"].stop()})
+
+
+def _write_env_private_key(b58_key: str) -> None:
+    """Set SOLANA_PRIVATE_KEY in the repo .env, preserving other lines."""
+    env_path = REPO_ROOT / ".env"
+    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    replaced = False
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("SOLANA_PRIVATE_KEY="):
+            lines[i] = f"SOLANA_PRIVATE_KEY={b58_key}"
+            replaced = True
+            break
+    if not replaced:
+        lines.append(f"SOLANA_PRIVATE_KEY={b58_key}")
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+async def handle_wallet_import(request: web.Request) -> web.Response:
+    """Import a wallet from a 12/24-word seed phrase. Localhost only.
+
+    Derives the Phantom-standard key, stores it in .env as SOLANA_PRIVATE_KEY
+    and activates it for the dashboard. The mnemonic is never stored or logged;
+    the private key is never returned. Restart the bot to trade with it.
+    """
+    blocked = _require_localhost(request)
+    if blocked:
+        return blocked
+    try:
+        body = await request.json()
+        mnemonic = str(body["mnemonic"])
+        account = int(body.get("account", 0))
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return web.json_response(
+            {"ok": False, "error": "Expected {mnemonic, account?}"}, status=400
+        )
+
+    try:
+        from dashboard.wallet_import import derive_from_mnemonic
+
+        derived = derive_from_mnemonic(mnemonic, account)
+    except ValueError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+    except ImportError:
+        return web.json_response(
+            {"ok": False, "error": "bip-utils not installed (run: uv sync)"},
+            status=500,
+        )
+
+    _write_env_private_key(derived["private_key_b58"])
+    os.environ["SOLANA_PRIVATE_KEY"] = derived["private_key_b58"]
+    logger.info("Imported wallet %s via dashboard", derived["pubkey"])
+    return web.json_response({"ok": True, "address": derived["pubkey"]})
 
 
 async def _wallet_info() -> dict[str, Any]:
@@ -260,11 +346,16 @@ def create_app(trades_log: str | Path | None = None) -> web.Application:
     """Build the aiohttp application."""
     app = web.Application()
     app["trades_log"] = Path(trades_log) if trades_log else Path("trades") / "trades.log"
+    app["bot"] = BotProcess()
     app.router.add_get("/", handle_index)
     app.router.add_get("/api/state", handle_state)
     app.router.add_get("/api/wallet", handle_wallet)
     app.router.add_post("/api/analysis", handle_analysis)
     app.router.add_post("/api/withdraw", handle_withdraw)
+    app.router.add_get("/api/bot/status", handle_bot_status)
+    app.router.add_post("/api/bot/start", handle_bot_start)
+    app.router.add_post("/api/bot/stop", handle_bot_stop)
+    app.router.add_post("/api/wallet/import", handle_wallet_import)
     return app
 
 
