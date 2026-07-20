@@ -44,8 +44,9 @@ from dashboard.analytics import (
 
 STATIC_DIR = Path(__file__).parent / "static"
 LAMPORTS_PER_SOL = 1_000_000_000
-# Kept back on every withdraw so the account stays rent-exempt and can pay fees.
-WITHDRAW_FEE_RESERVE_SOL = 0.001
+# Kept back on every withdraw so the account keeps a working SOL buffer for
+# fees, rent and in-flight trades.
+WITHDRAW_FEE_RESERVE_SOL = 0.03
 
 
 # --------------------------------------------------------------------------- #
