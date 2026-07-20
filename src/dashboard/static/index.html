@@ -215,6 +215,10 @@
         <h2>⤢ Cerradas (historial) <span class="tag" id="closed-tag"></span></h2>
         <div class="body" id="closed-positions"><div class="empty">sin historial</div></div>
       </div>
+      <div class="card">
+        <h2>🔥 Pagaron Dex (recientes) <span class="tag">candidatos a comprar</span></h2>
+        <div class="body" id="dexpaid"><div class="empty">cargando feed…</div></div>
+      </div>
     </div>
     <div class="col">
       <div class="card">
@@ -670,9 +674,25 @@ document.getElementById("analysis-form").addEventListener("submit", async (ev) =
     <div class="kv"><span>hold medio</span><b>${a.avg_hold_seconds !== null ? a.avg_hold_seconds+"s" : "—"}</b></div>`;
 });
 
+async function loadDexpaid() {
+  try {
+    const r = await fetch("/api/dexpaid"); if (r.status === 401) return;
+    const j = await r.json(); const rows = j.candidates || [];
+    const el = document.getElementById("dexpaid");
+    if (!rows.length) { el.innerHTML = '<div class="empty">sin candidatos ahora</div>'; return; }
+    el.innerHTML = '<table><tr><th>token</th><th class="num">boosts</th><th class="num">pagó hace</th><th class="num">liq</th><th>estado</th></tr>' +
+      rows.map(r => `<tr><td><span class="sym">${r.symbol}</span> <a class="mint" href="${sx(r.mint)}" target="_blank">${short(r.mint)}</a></td>
+        <td class="num">${r.boosts}</td><td class="num">${r.payment_age_min}m</td>
+        <td class="num">${r.liquidity_usd ? "$" + Math.round(r.liquidity_usd).toLocaleString() : "—"}</td>
+        <td>${r.migrated ? '<span class="chip lb">migrado</span>' : '<span class="chip pf">en curva</span>'} ${r.lp_locked_pct != null ? "🔒" + Math.round(r.lp_locked_pct) + "%" : ""}</td></tr>`).join("") + "</table>";
+  } catch (e) {}
+}
+
 tick();
 loadConfigs();
+loadDexpaid();
 setInterval(tick, REFRESH_MS);
+setInterval(loadDexpaid, 30000);
 setInterval(heartbeat, 1000);
 window.addEventListener("resize", () => { /* redraw handled next tick */ });
 </script>

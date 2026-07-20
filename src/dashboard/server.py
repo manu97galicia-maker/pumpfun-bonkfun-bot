@@ -317,6 +317,18 @@ async def handle_wallet_import(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "address": derived["pubkey"]})
 
 
+async def handle_dexpaid(request: web.Request) -> web.Response:
+    """Live feed of tokens that recently paid DexScreener (dex paid / boosts)."""
+    from dashboard.dexpaid_feed import get_candidates
+
+    try:
+        rows = await get_candidates(limit=10, max_age_minutes=180.0)
+    except Exception as exc:  # noqa: BLE001 -- feed is best-effort
+        logger.warning("dexpaid feed failed: %s", exc)
+        rows = []
+    return web.json_response({"candidates": rows})
+
+
 async def handle_configs(request: web.Request) -> web.Response:
     """List bot configs with their current strategy + filter values."""
     from dashboard.config_editor import (
@@ -520,6 +532,7 @@ def create_app(trades_log: str | Path | None = None) -> web.Application:
     app.router.add_get("/api/configs", handle_configs)
     app.router.add_post("/api/config", handle_config_update)
     app.router.add_post("/api/command", handle_command)
+    app.router.add_get("/api/dexpaid", handle_dexpaid)
     return app
 
 
