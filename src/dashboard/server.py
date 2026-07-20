@@ -473,6 +473,7 @@ def main() -> None:
     # localhost-only regardless, so remote access is monitoring + read.
     host = os.getenv("DASHBOARD_HOST", "127.0.0.1")
     scope = "local only" if host == "127.0.0.1" else f"reachable on {host}"
+    app = create_app()
     print(f"Trading dashboard -> http://{host}:{port}  ({scope}, Ctrl+C to stop)")
     web.run_app(app, host=host, port=port, print=None)
 
