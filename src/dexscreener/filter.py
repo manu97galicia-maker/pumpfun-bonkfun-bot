@@ -32,6 +32,7 @@ from dexscreener.client import (
     DexScreenerClient,
     TokenMarketData,
 )
+from dexscreener.rugcheck import RugCheckClient
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -89,9 +90,33 @@ class DexScreenerFilter:
         self.max_market_cap: float = float(config.get("max_market_cap", 0) or 0)
         self.timeout_seconds: float = float(config.get("timeout_seconds", 5) or 5)
 
+        # OR group: at least one of these must pass (e.g. dex paid OR boosts>=100).
+        # Supported keys: require_dex_paid (bool), min_boosts, min_liquidity_usd,
+        # min_volume_h24, min_market_cap.
+        self.any_of: dict = config.get("any_of") or {}
+
+        # Locked-liquidity check via RugCheck (DexScreener can't provide it).
+        self.require_liquidity_locked: bool = bool(
+            config.get("require_liquidity_locked", False)
+        )
+        self.min_lp_locked_pct: float = float(config.get("min_lp_locked_pct", 50) or 50)
+        self.block_if_rugged: bool = bool(config.get("block_if_rugged", True))
+
         self._owns_client = client is None
         self._client = client or DexScreenerClient(
             chain=self.chain, timeout=self.timeout_seconds
+        )
+        self._rug: RugCheckClient | None = None
+
+    def _rugcheck(self) -> RugCheckClient:
+        if self._rug is None:
+            self._rug = RugCheckClient(timeout=self.timeout_seconds)
+        return self._rug
+
+    def _any_of_needs_market(self) -> bool:
+        return any(
+            k in self.any_of and self.any_of.get(k)
+            for k in ("min_boosts", "min_liquidity_usd", "min_volume_h24", "min_market_cap")
         )
 
     @property
@@ -104,6 +129,7 @@ class DexScreenerFilter:
             or self.min_volume_h24 > 0
             or self.min_market_cap > 0
             or self.max_market_cap > 0
+            or self._any_of_needs_market()
         )
 
     def describe(self) -> str:
@@ -160,9 +186,10 @@ class DexScreenerFilter:
         dex_paid: DexPaidStatus | None = None
         market: TokenMarketData | None = None
 
-        if self.require_dex_paid:
+        need_paid = self.require_dex_paid or bool(self.any_of.get("require_dex_paid"))
+        if need_paid:
             dex_paid = await self._client.get_dex_paid_status(mint, self.chain)
-            if not dex_paid.paid:
+            if self.require_dex_paid and not dex_paid.paid:
                 reasons.append("not Dex Paid")
 
         if self._needs_market_data:
@@ -197,12 +224,63 @@ class DexScreenerFilter:
                         f"marketcap ${mcap:,.0f} > ${self.max_market_cap:,.0f}"
                     )
 
+        # OR group: at least one condition must pass.
+        if self.any_of:
+            passed, fails = self._eval_any_of(dex_paid, market)
+            if not passed:
+                reasons.append("ninguna condición OR cumplida (" + ", ".join(fails) + ")")
+
+        # Locked liquidity via RugCheck.
+        if self.require_liquidity_locked:
+            report = await self._rugcheck().get_report(mint)
+            if not report.found:
+                reasons.append("RugCheck sin datos de liquidez")
+            else:
+                if self.block_if_rugged and report.rugged:
+                    reasons.append("RugCheck: marcado como rugged")
+                if report.lp_locked_pct < self.min_lp_locked_pct:
+                    reasons.append(
+                        f"liquidez bloqueada {report.lp_locked_pct:.0f}% "
+                        f"< {self.min_lp_locked_pct:.0f}%"
+                    )
+
         return FilterDecision(
             allowed=not reasons,
             reasons=reasons,
             market=market,
             dex_paid=dex_paid,
         )
+
+    def _eval_any_of(
+        self, dex_paid: DexPaidStatus | None, market: TokenMarketData | None
+    ) -> tuple[bool, list[str]]:
+        """Evaluate the OR group. Returns (at_least_one_passed, fail_reasons)."""
+        passed: list[str] = []
+        fails: list[str] = []
+        a = self.any_of
+
+        if a.get("require_dex_paid"):
+            if dex_paid and dex_paid.paid:
+                passed.append("dex_paid")
+            else:
+                fails.append("no dex paid")
+
+        def _market_cond(key: str, attr: str, label: str) -> None:
+            threshold = float(a.get(key) or 0)
+            if threshold <= 0:
+                return
+            value = float(getattr(market, attr, 0) or 0) if market else 0.0
+            if value >= threshold:
+                passed.append(f"{label} {value:g}")
+            else:
+                fails.append(f"{label} {value:g}<{threshold:g}")
+
+        _market_cond("min_boosts", "boosts_active", "boosts")
+        _market_cond("min_liquidity_usd", "liquidity_usd", "liq")
+        _market_cond("min_volume_h24", "volume_h24", "vol24")
+        _market_cond("min_market_cap", "market_cap", "mcap")
+
+        return (len(passed) > 0, fails)
 
     async def should_buy(self, mint: str, symbol: str = "") -> bool:
         """Decide whether the trader should proceed with the buy.
@@ -238,6 +316,8 @@ class DexScreenerFilter:
         return True
 
     async def close(self) -> None:
-        """Close the owned DexScreener client, if any."""
+        """Close the owned DexScreener + RugCheck clients, if any."""
         if self._owns_client:
             await self._client.close()
+        if self._rug is not None:
+            await self._rug.close()
