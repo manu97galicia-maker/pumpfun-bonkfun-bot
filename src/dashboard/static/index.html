@@ -170,6 +170,9 @@
     <div class="note" style="text-align:center">Acceso remoto — inicia sesión</div>
     <input id="login-user" placeholder="usuario" autocomplete="username" />
     <input id="login-pin" type="password" inputmode="numeric" placeholder="PIN" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+    <label style="display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;justify-content:center;letter-spacing:0">
+      <input type="checkbox" id="login-remember" checked style="width:auto" /> Recordarme (no volver a pedir)
+    </label>
     <button class="btn go" onclick="doLogin()">Entrar</button>
     <div id="login-err" class="neg" style="text-align:center;font-size:11px"></div>
   </div>
@@ -610,25 +613,54 @@ async function toggleBot() {
   await tick();
 }
 
-let isLocal = true;
-function showLogin() { document.getElementById("login").classList.add("show"); }
+let isLocal = true, autoTried = false;
+function showLogin() {
+  const s = localStorage.getItem("dash_creds");
+  if (s) { try { const c = JSON.parse(s); document.getElementById("login-user").value = c.user || ""; } catch (e) {} }
+  document.getElementById("login").classList.add("show");
+}
 function hideLogin() { document.getElementById("login").classList.remove("show"); }
+async function tryAutoLogin() {
+  const s = localStorage.getItem("dash_creds");
+  if (!s) return false;
+  try {
+    const { user, password } = JSON.parse(s);
+    const r = await fetch("/api/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ user, password }) });
+    return (await r.json()).ok === true;
+  } catch (e) { return false; }
+}
 async function doLogin() {
   const user = document.getElementById("login-user").value.trim();
   const password = document.getElementById("login-pin").value.trim();
+  const remember = document.getElementById("login-remember").checked;
   const err = document.getElementById("login-err"); err.textContent = "";
   try {
     const r = await fetch("/api/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ user, password }) });
     const j = await r.json();
-    if (j.ok) { hideLogin(); document.getElementById("login-pin").value = ""; await tick(); await loadConfigs(); }
-    else err.textContent = j.error || "error";
+    if (j.ok) {
+      if (remember) localStorage.setItem("dash_creds", JSON.stringify({ user, password }));
+      else localStorage.removeItem("dash_creds");
+      hideLogin(); document.getElementById("login-pin").value = "";
+      await tick(); await loadConfigs();
+    } else err.textContent = j.error || "error";
   } catch (e) { err.textContent = "" + e; }
+}
+function logout() {
+  localStorage.removeItem("dash_creds");
+  document.cookie = "dash_auth=; Max-Age=0; path=/";
+  location.reload();
 }
 
 async function tick() {
   try {
     const r = await fetch("/api/state");
-    if (r.status === 401) { setConn(true); showLogin(); return; }
+    if (r.status === 401) {
+      setConn(true);
+      if (!autoTried) { autoTried = true; if (await tryAutoLogin()) return tick(); }
+      showLogin();
+      return;
+    }
+    autoTried = false;
     hideLogin();
     const s = await r.json();
     setConn(true); lastOk = Date.now();
