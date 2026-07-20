@@ -44,6 +44,8 @@ from dashboard.analytics import (
 
 STATIC_DIR = Path(__file__).parent / "static"
 LAMPORTS_PER_SOL = 1_000_000_000
+# Kept back on every withdraw so the account stays rent-exempt and can pay fees.
+WITHDRAW_FEE_RESERVE_SOL = 0.001
 
 
 # --------------------------------------------------------------------------- #
@@ -231,10 +233,21 @@ async def _send_sol(destination: str, amount_sol: float) -> str:
 
     dest = Pubkey.from_string(destination)
     lamports = int(round(amount_sol * LAMPORTS_PER_SOL))
-    ix = transfer(
-        TransferParams(from_pubkey=keypair.pubkey(), to_pubkey=dest, lamports=lamports)
-    )
+    reserve = int(round(WITHDRAW_FEE_RESERVE_SOL * LAMPORTS_PER_SOL))
+
     async with AsyncClient(rpc) as client:
+        balance = (await client.get_balance(keypair.pubkey())).value
+        if lamports > balance - reserve:
+            available = max(0, balance - reserve) / LAMPORTS_PER_SOL
+            raise ValueError(
+                f"Amount too high: {available:.6f} SOL available after "
+                f"{WITHDRAW_FEE_RESERVE_SOL} SOL fee reserve"
+            )
+        ix = transfer(
+            TransferParams(
+                from_pubkey=keypair.pubkey(), to_pubkey=dest, lamports=lamports
+            )
+        )
         blockhash = (await client.get_latest_blockhash()).value.blockhash
         msg = Message.new_with_blockhash([ix], keypair.pubkey(), blockhash)
         tx = Transaction([keypair], msg, blockhash)
