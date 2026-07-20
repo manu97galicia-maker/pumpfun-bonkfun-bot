@@ -103,6 +103,12 @@ async def start_bot(config_path: str):
             take_profit_percentage=cfg["trade"].get("take_profit_percentage"),
             stop_loss_percentage=cfg["trade"].get("stop_loss_percentage"),
             max_hold_time=cfg["trade"].get("max_hold_time"),
+            # Tiered take-profit ladder (partial sells + moonbag)
+            take_profit_sell_percentage=cfg["trade"].get("take_profit_sell_percentage"),
+            tp2_gain=cfg["trade"].get("tp2_gain"),
+            tp2_sell=cfg["trade"].get("tp2_sell"),
+            tp3_gain=cfg["trade"].get("tp3_gain"),
+            tp3_sell=cfg["trade"].get("tp3_sell"),
             price_check_interval=cfg["trade"].get("price_check_interval", 10),
             # Listener configuration
             listener_type=cfg["filters"]["listener_type"],

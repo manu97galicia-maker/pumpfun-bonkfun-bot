@@ -28,10 +28,10 @@ trade:
   sell_slippage: 0.3
 
   # Exit strategy configuration
-  exit_strategy: "time_based" # Options: "time_based", "tp_sl", "manual"
+  exit_strategy: "tp_sl" # Options: "time_based", "tp_sl", "manual"
   take_profit_percentage: 0.4 # Take profit at 40% gain (0.4 = 40%)
-  stop_loss_percentage: 0.4 # Stop loss at 40% loss (0.4 = 40%)
-  max_hold_time: 15 # Maximum hold time in seconds for TP/SL strategy, for time_based - see wait_after_buy
+  stop_loss_percentage: 0.18 # Stop loss at 40% loss (0.4 = 40%)
+  max_hold_time: 300 # Maximum hold time in seconds for TP/SL strategy, for time_based - see wait_after_buy
   price_check_interval: 2 # Check price every 2 seconds
 
   # EXTREME FAST mode configuration
@@ -39,6 +39,11 @@ trade:
   # The bot buys the specified number of tokens directly, making the process faster but less precise.
   extreme_fast_mode: true
   extreme_fast_token_amount: 20 # Amount of tokens to buy
+  take_profit_sell_percentage: 0.8
+  tp2_gain: 1
+  tp2_sell: 0.1
+  tp3_gain: 4
+  tp3_sell: 0.1
 
 # Priority fee configuration
 # Manage transaction speed and cost on the Solana network.

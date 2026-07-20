@@ -27,6 +27,7 @@ from platforms import get_platform_implementations
 from trading.base import TradeResult
 from trading.platform_aware import PlatformAwareBuyer, PlatformAwareSeller
 from trading.position import Position
+from trading.tiered_exit import build_tiers, moonbag_fraction, tiers_due
 from utils.logger import get_logger
 
 # Try to use uvloop on Unix or winloop on Windows for better performance
@@ -74,6 +75,14 @@ class UniversalTrader:
         take_profit_percentage: float | None = None,
         stop_loss_percentage: float | None = None,
         max_hold_time: int | None = None,
+        # Tiered take-profit ladder (tier 1 = take_profit_percentage +
+        # take_profit_sell_percentage; tiers 2/3 below). gain is fraction
+        # above entry (x2 = 1.0), sell is fraction of the original position.
+        take_profit_sell_percentage: float | None = None,
+        tp2_gain: float | None = None,
+        tp2_sell: float | None = None,
+        tp3_gain: float | None = None,
+        tp3_sell: float | None = None,
         price_check_interval: int = 10,
         # Priority fee configuration
         enable_dynamic_priority_fee: bool = False,
@@ -190,6 +199,20 @@ class UniversalTrader:
         self.stop_loss_percentage = stop_loss_percentage
         self.max_hold_time = max_hold_time
         self.price_check_interval = price_check_interval
+        # Build the take-profit ladder. Tier 1 sells take_profit_sell_percentage
+        # (default 100% for backward compatibility) at take_profit_percentage.
+        self.tp_tiers = build_tiers(
+            [
+                (
+                    take_profit_percentage,
+                    take_profit_sell_percentage
+                    if take_profit_sell_percentage
+                    else 1.0,
+                ),
+                (tp2_gain, tp2_sell),
+                (tp3_gain, tp3_sell),
+            ]
+        )
 
         # Timing parameters
         self.wait_time_after_creation = wait_time_after_creation
@@ -521,26 +544,125 @@ class UniversalTrader:
     async def _handle_tp_sl_exit(
         self, token_info: TokenInfo, buy_result: TradeResult
     ) -> None:
-        """Handle take profit/stop loss exit strategy."""
-        # Create position
-        position = Position.create_from_buy_result(
-            mint=token_info.mint,
-            symbol=token_info.symbol,
-            entry_price=buy_result.price,
-            quantity=buy_result.amount,
-            take_profit_percentage=self.take_profit_percentage,
-            stop_loss_percentage=self.stop_loss_percentage,
-            max_hold_time=self.max_hold_time,
+        """Handle the tiered take-profit / stop-loss exit strategy."""
+        await self._monitor_tiered_exit(token_info, buy_result)
+
+    async def _sell_amount(
+        self,
+        token_info: TokenInfo,
+        amount: float,
+        ref_price: float,
+        reason: str,
+    ) -> bool:
+        """Sell a specific token amount and log it. Returns success."""
+        sell_result = await self.seller.execute(
+            token_info, token_amount=amount, token_price=ref_price
+        )
+        if sell_result.success:
+            logger.info(
+                f"Sold {amount:.6f} {token_info.symbol} ({reason}) "
+                f"@ {sell_result.price:.8f} SOL"
+            )
+            self._log_trade(
+                "sell",
+                token_info,
+                sell_result.price,
+                sell_result.amount,
+                sell_result.tx_signature,
+            )
+            return True
+        logger.error(
+            f"Sell failed ({reason}) for {token_info.symbol}: "
+            f"{sell_result.error_message}"
+        )
+        return False
+
+    async def _monitor_tiered_exit(
+        self, token_info: TokenInfo, buy_result: TradeResult
+    ) -> None:
+        """Monitor a position and sell in tiers, holding any moonbag.
+
+        Take-profit tiers fire as their targets are reached (partial sells);
+        stop-loss dumps everything still held; an optional max_hold_time is a
+        time backstop. Whatever remains after all tiers fire is held.
+        """
+        entry_price = buy_result.price
+        original_qty = buy_result.amount
+        tiers = self.tp_tiers
+        executed = [False] * len(tiers)
+        remaining = original_qty
+        sl_price = (
+            entry_price * (1 - self.stop_loss_percentage)
+            if self.stop_loss_percentage
+            else None
+        )
+        moonbag = moonbag_fraction(tiers)
+        logger.info(
+            f"Tiered exit active for {token_info.symbol}: "
+            f"tiers={[(f'+{t.gain*100:.0f}%', f'{t.sell*100:.0f}%') for t in tiers]} "
+            f"SL={self.stop_loss_percentage} moonbag={moonbag*100:.0f}%"
         )
 
-        logger.info(f"Created position: {position}")
-        if position.take_profit_price:
-            logger.info(f"Take profit target: {position.take_profit_price:.8f} SOL")
-        if position.stop_loss_price:
-            logger.info(f"Stop loss target: {position.stop_loss_price:.8f} SOL")
+        pool_address = self._get_pool_address(token_info)
+        curve_manager = self.platform_implementations.curve_manager
+        start = monotonic()
 
-        # Monitor position until exit condition is met
-        await self._monitor_position_until_exit(token_info, position)
+        while remaining > 1e-9:
+            try:
+                price = await curve_manager.calculate_price(pool_address)
+
+                # Stop loss: dump everything still held.
+                if sl_price is not None and price <= sl_price:
+                    logger.info(
+                        f"STOP LOSS for {token_info.symbol} at {price:.8f} SOL "
+                        f"(<= {sl_price:.8f})"
+                    )
+                    await self._sell_amount(
+                        token_info, remaining, entry_price, "stop_loss"
+                    )
+                    remaining = 0.0
+                    break
+
+                # Take-profit tiers that are now due.
+                for i in tiers_due(entry_price, price, tiers, executed):
+                    amount = min(original_qty * tiers[i].sell, remaining)
+                    if amount <= 1e-9:
+                        executed[i] = True
+                        continue
+                    reason = f"tp_tier{i + 1}_+{tiers[i].gain * 100:.0f}%"
+                    if await self._sell_amount(
+                        token_info, amount, entry_price, reason
+                    ):
+                        executed[i] = True
+                        remaining -= amount
+
+                # All tiers done -> hold the moonbag and stop monitoring.
+                if tiers and all(executed):
+                    if remaining > 1e-9:
+                        logger.info(
+                            f"All TP tiers hit for {token_info.symbol} — "
+                            f"holding moonbag {moonbag * 100:.0f}% "
+                            f"({remaining:.6f} tokens)"
+                        )
+                    break
+
+                # Time backstop (optional).
+                if self.max_hold_time and (monotonic() - start) >= self.max_hold_time:
+                    logger.info(
+                        f"Max hold time reached for {token_info.symbol}; "
+                        f"selling remaining"
+                    )
+                    await self._sell_amount(
+                        token_info, remaining, entry_price, "max_hold_time"
+                    )
+                    remaining = 0.0
+                    break
+
+                await asyncio.sleep(self.price_check_interval)
+
+            except Exception:
+                logger.exception("Error in tiered exit monitor")
+                await asyncio.sleep(self.price_check_interval)
 
     async def _handle_time_based_exit(
         self, token_info: TokenInfo, buy_result: TradeResult
