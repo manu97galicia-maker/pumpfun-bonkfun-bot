@@ -152,6 +152,7 @@
       <div class="item">actualizado<br><b id="last-update">—</b></div>
       <div class="item">refresco<br><b id="countdown">—</b></div>
       <div class="conn"><span class="dot" id="conn-dot"></span> <b id="conn-text">LIVE</b></div>
+      <button class="btn" id="refresh-btn" onclick="manualRefresh()" title="Actualizar datos ahora">⟳ Actualizar</button>
       <div class="botctl">
         <span class="pill" id="bot-pill">bot: —</span>
         <button class="btn" id="bot-btn" onclick="toggleBot()" disabled>—</button>
@@ -477,6 +478,13 @@ async function doWithdraw() {
     const j = await r.json();
     out.innerHTML = j.ok ? `<span class="pos">OK · <a href="https://solscan.io/tx/${j.signature}" target="_blank">tx</a></span>` : `<span class="neg">${j.error}</span>`;
   } catch (e) { out.innerHTML = `<span class="neg">${e}</span>`; }
+}
+
+async function manualRefresh() {
+  const b = document.getElementById("refresh-btn");
+  b.disabled = true; b.textContent = "⟳ …";
+  await tick();
+  b.textContent = "⟳ Actualizar"; b.disabled = false;
 }
 
 function setConn(ok) {
