@@ -457,9 +457,14 @@ def main() -> None:
         pass
 
     port = int(os.getenv("DASHBOARD_PORT", "8787"))
-    app = create_app()
-    print(f"Trading dashboard -> http://127.0.0.1:{port}  (local only, Ctrl+C to stop)")
-    web.run_app(app, host="127.0.0.1", port=port, print=None)
+    # Default localhost-only. Set DASHBOARD_HOST=0.0.0.0 (ideally behind a
+    # private VPN like Tailscale) to reach it from your phone. Money-moving
+    # endpoints (bot start/stop, withdraw, wallet import, config writes) stay
+    # localhost-only regardless, so remote access is monitoring + read.
+    host = os.getenv("DASHBOARD_HOST", "127.0.0.1")
+    scope = "local only" if host == "127.0.0.1" else f"reachable on {host}"
+    print(f"Trading dashboard -> http://{host}:{port}  ({scope}, Ctrl+C to stop)")
+    web.run_app(app, host=host, port=port, print=None)
 
 
 if __name__ == "__main__":
