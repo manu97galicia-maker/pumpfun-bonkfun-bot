@@ -158,6 +158,8 @@ async def start_bot(config_path: str):
             yolo_mode=cfg["filters"].get("yolo_mode", False),
             # DexScreener buy filter (disabled unless present + enabled)
             dexscreener_config=cfg.get("filters", {}).get("dexscreener"),
+            # Buy-on-dex-paid acquisition mode (disabled unless present + enabled)
+            buy_on_dex_paid=cfg.get("filters", {}).get("buy_on_dex_paid"),
             # Compute unit configuration
             compute_units=cfg.get("compute_units", {}),
             # Node provider configuration

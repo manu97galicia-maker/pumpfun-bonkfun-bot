@@ -108,6 +108,8 @@ class UniversalTrader:
         yolo_mode: bool = False,
         # DexScreener buy filter (disabled unless configured)
         dexscreener_config: dict | None = None,
+        # Buy-on-dex-paid acquisition mode (disabled unless configured)
+        buy_on_dex_paid: dict | None = None,
         # Compute unit configuration
         compute_units: dict | None = None,
         # Node provider configuration
@@ -234,6 +236,8 @@ class UniversalTrader:
 
         # DexScreener buy filter (no-op unless enabled in config)
         self.dex_filter = DexScreenerFilter(dexscreener_config)
+        # Buy-on-dex-paid acquisition mode config (off unless enabled)
+        self.buy_on_dex_paid = buy_on_dex_paid or {}
 
         # State tracking
         self.traded_mints: set[Pubkey] = set()
@@ -277,6 +281,11 @@ class UniversalTrader:
             logger.info(f"RPC warm-up successful (getHealth passed: {health_resp})")
         except Exception as e:
             logger.warning(f"RPC warm-up failed: {e!s}")
+
+        if self.buy_on_dex_paid.get("enabled"):
+            logger.info("Buy-on-dex-paid mode ENABLED (bypasses new-token listener)")
+            await self._run_dexpaid_mode()
+            return
 
         try:
             # Choose operating mode based on yolo_mode
@@ -447,6 +456,27 @@ class UniversalTrader:
                 logger.exception("Error in token queue processor")
             finally:
                 self.token_queue.task_done()
+
+    async def _run_dexpaid_mode(self) -> None:
+        """Run the buy-on-dex-paid acquisition loop until interrupted."""
+        from monitoring.dexpaid_source import DexPaidSource
+
+        source = DexPaidSource(
+            self.platform_implementations,
+            self.solana_client,
+            poll_interval=float(self.buy_on_dex_paid.get("poll_interval", 30)),
+            max_age_minutes=float(self.buy_on_dex_paid.get("max_age_minutes", 180)),
+        )
+        try:
+            await source.run(self._on_dexpaid_token)
+        except asyncio.CancelledError:
+            logger.info("Buy-on-dex-paid mode stopped")
+
+    async def _on_dexpaid_token(self, token_info: TokenInfo) -> None:
+        """Handle a dex-paid candidate: buy in the background (non-blocking)."""
+        # Run each candidate independently so one position's exit monitor
+        # doesn't stall detection of the next candidate.
+        asyncio.create_task(self._handle_token(token_info))  # noqa: RUF006
 
     async def _handle_token(self, token_info: TokenInfo) -> None:
         """Handle a new token creation event."""
