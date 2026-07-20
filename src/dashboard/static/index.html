@@ -144,12 +144,28 @@
   .strat-grid label { display:flex; flex-direction:column; gap:3px; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.5px; }
   .strat-grid .wide { grid-column:1 / -1; }
   .act { color:var(--green); } .act-dex { color:var(--cyan); }
+  .login-overlay { position:fixed; inset:0; background:rgba(3,5,10,.94); display:none; align-items:center; justify-content:center; z-index:60; }
+  .login-overlay.show { display:flex; }
+  .login-box { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:26px 24px; width:290px; box-shadow:var(--glow); display:flex; flex-direction:column; gap:12px; }
+  .login-box h3 { margin:0; color:var(--cyan); letter-spacing:3px; font-size:14px; text-align:center; }
+  .login-box input { text-align:center; letter-spacing:3px; font-size:16px; }
 
   @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .form { grid-template-columns:1fr; } .strip { flex-wrap:wrap; } .strip .cell { min-width:50%; } }
   @media (prefers-reduced-motion: reduce) { .dot, .feed-row.fresh { animation: none; } }
 </style>
 </head>
 <body>
+<div class="login-overlay" id="login">
+  <div class="login-box">
+    <div style="text-align:center;font-size:36px">🤖</div>
+    <h3>SNIPER BOT</h3>
+    <div class="note" style="text-align:center">Acceso remoto — inicia sesión</div>
+    <input id="login-user" placeholder="usuario" autocomplete="username" />
+    <input id="login-pin" type="password" inputmode="numeric" placeholder="PIN" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()" />
+    <button class="btn go" onclick="doLogin()">Entrar</button>
+    <div id="login-err" class="neg" style="text-align:center;font-size:11px"></div>
+  </div>
+</div>
 <div class="wrap">
   <header>
     <div class="logo">
@@ -372,14 +388,17 @@ function renderWallet(w) {
     <div><div class="note">Balance</div><div class="bal ${w.balance_sol === null ? "muted" : ""}">${w.balance_sol === null ? "RPC n/d" : Number(w.balance_sol).toFixed(4)} <span class="note">SOL</span></div></div>
     <div><div class="note">Dirección de depósito (envía SOL aquí)</div>
       <div class="addr"><code id="wa">${w.address}</code><button class="btn" onclick="navigator.clipboard.writeText('${w.address}')">copiar</button></div></div>
-    <div><div class="note">Retirar SOL (reserva fija 0.03 SOL)</div>
+    ${isLocal ? `<div><div class="note">Retirar SOL (reserva fija 0.03 SOL)</div>
       <div class="form" style="padding:8px 0">
         <label class="full">Destino<input id="wd-dest" placeholder="pubkey de destino" ${wd ? "" : "disabled"} /></label>
         <label>Cantidad (SOL)<input id="wd-amt" type="number" step="0.0001" placeholder="0.0" ${wd ? "" : "disabled"} /></label>
         <button class="btn warn" ${wd ? "" : "disabled"} onclick="doWithdraw()">⤴ retirar</button></div>
       ${wd ? '<div class="danger-note">Movimiento de fondos REAL activado. Revisa destino y cantidad.</div>'
            : '<div class="note">Retiro desactivado. Actívalo con <code>DASHBOARD_ALLOW_WITHDRAW=true</code>.</div>'}
-      <div id="wd-result" class="note"></div></div>`;
+      <div id="wd-result" class="note"></div></div>`
+    : '<div class="note">🔒 Retirar SOL: solo desde el PC por seguridad.</div>'}`;
+  const imp = document.querySelector(".import");
+  if (imp) imp.style.display = isLocal ? "" : "none";
 }
 
 let CONFIGS = [];
@@ -534,10 +553,29 @@ async function toggleBot() {
   await tick();
 }
 
+let isLocal = true;
+function showLogin() { document.getElementById("login").classList.add("show"); }
+function hideLogin() { document.getElementById("login").classList.remove("show"); }
+async function doLogin() {
+  const user = document.getElementById("login-user").value.trim();
+  const password = document.getElementById("login-pin").value.trim();
+  const err = document.getElementById("login-err"); err.textContent = "";
+  try {
+    const r = await fetch("/api/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ user, password }) });
+    const j = await r.json();
+    if (j.ok) { hideLogin(); document.getElementById("login-pin").value = ""; await tick(); await loadConfigs(); }
+    else err.textContent = j.error || "error";
+  } catch (e) { err.textContent = "" + e; }
+}
+
 async function tick() {
   try {
-    const r = await fetch("/api/state"); const s = await r.json();
+    const r = await fetch("/api/state");
+    if (r.status === 401) { setConn(true); showLogin(); return; }
+    hideLogin();
+    const s = await r.json();
     setConn(true); lastOk = Date.now();
+    isLocal = !s.session || s.session.local;
     renderStrip(s.results);
     renderKpis(s.results, s.results.best, s.results.worst);
     drawEquity(s.closed_positions);

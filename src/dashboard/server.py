@@ -35,7 +35,70 @@ from typing import Any
 
 from aiohttp import web
 
+from dashboard import auth
+
 logger = logging.getLogger(__name__)
+
+# Endpoints that require the request to come from the PC itself, even with a
+# valid login (they move funds or handle keys).
+PC_ONLY_PATHS = frozenset({"/api/withdraw", "/api/wallet/import"})
+# Endpoints reachable by a remote client WITHOUT logging in.
+PUBLIC_ENDPOINTS = frozenset({("GET", "/"), ("POST", "/api/login")})
+
+
+def _is_local(request: web.Request) -> bool:
+    peer = request.transport.get_extra_info("peername") if request.transport else None
+    return bool(peer) and peer[0] in ("127.0.0.1", "::1")
+
+
+@web.middleware
+async def auth_middleware(request: web.Request, handler: Any) -> web.StreamResponse:
+    """Gate remote access: localhost is trusted; others must log in.
+
+    PC-only endpoints (withdraw, wallet import) always require localhost.
+    """
+    local = _is_local(request)
+    path = request.path
+
+    if path in PC_ONLY_PATHS and not local:
+        return web.json_response(
+            {"ok": False, "error": "Solo desde el PC por seguridad"}, status=403
+        )
+    if local:
+        return await handler(request)
+    if (request.method, path) in PUBLIC_ENDPOINTS or path.startswith("/favicon"):
+        return await handler(request)
+    if auth.cookie_valid(request.cookies.get(auth.COOKIE)):
+        return await handler(request)
+    return web.json_response({"ok": False, "error": "login required"}, status=401)
+
+
+async def handle_login(request: web.Request) -> web.Response:
+    """Log in a remote client with the dashboard password."""
+    try:
+        body = await request.json()
+        user = str(body.get("user", ""))
+        password = str(body.get("password", ""))
+    except json.JSONDecodeError:
+        user = password = ""
+    if not auth.password_set():
+        return web.json_response(
+            {"ok": False, "error": "Sin credenciales. Pon DASHBOARD_USER y DASHBOARD_PASSWORD en .env."},
+            status=400,
+        )
+    if not auth.check_password(user, password):
+        return web.json_response(
+            {"ok": False, "error": "Usuario o PIN incorrecto"}, status=401
+        )
+    resp = web.json_response({"ok": True})
+    resp.set_cookie(
+        auth.COOKIE,
+        auth.token() or "",
+        httponly=True,
+        samesite="Lax",
+        max_age=60 * 60 * 24 * 30,
+    )
+    return resp
 
 from dashboard.analytics import (
     build_positions,
@@ -165,6 +228,10 @@ async def handle_state(request: web.Request) -> web.Response:
         "alerts": _build_alerts(positions, summary),
         "wallet": await _wallet_info(),
         "bot": request.app["bot"].status(),
+        "session": {
+            "local": _is_local(request),
+            "password_set": auth.password_set(),
+        },
     }
     return web.json_response(state)
 
@@ -437,9 +504,10 @@ async def _send_sol(destination: str, amount_sol: float) -> str:
 
 def create_app(trades_log: str | Path | None = None) -> web.Application:
     """Build the aiohttp application."""
-    app = web.Application()
+    app = web.Application(middlewares=[auth_middleware])
     app["trades_log"] = Path(trades_log) if trades_log else Path("trades") / "trades.log"
     app["bot"] = BotProcess()
+    app.router.add_post("/api/login", handle_login)
     app.router.add_get("/", handle_index)
     app.router.add_get("/api/state", handle_state)
     app.router.add_get("/api/wallet", handle_wallet)
