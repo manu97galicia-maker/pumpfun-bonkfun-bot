@@ -185,6 +185,30 @@ def update_strategy(
     return read_strategy(name, config_dir)
 
 
+def set_enabled(
+    name: str, enabled: bool, config_dir: str | Path = CONFIG_DIR
+) -> bool:
+    """Turn a bot config on/off via its top-level ``enabled`` key.
+
+    Takes effect on the next bot start (configs are read at startup).
+    """
+    path = _safe_path(name, config_dir)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    val = "true" if enabled else "false"
+    done = False
+    for i, line in enumerate(lines):
+        m = re.match(r"^enabled\s*:\s*([^#]*?)(\s+#.*)?$", line)
+        if m:
+            comment = m.group(2) or ""
+            lines[i] = f"enabled: {val}{comment}"
+            done = True
+            break
+    if not done:
+        lines.insert(0, f"enabled: {val}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return enabled
+
+
 def _indent_of(line: str) -> int:
     return len(line) - len(line.lstrip())
 

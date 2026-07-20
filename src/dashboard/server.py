@@ -359,7 +359,7 @@ async def handle_config_update(request: web.Request) -> web.Response:
     blocked = _require_localhost(request)
     if blocked:
         return blocked
-    from dashboard.config_editor import update_dexscreener, update_strategy
+    from dashboard.config_editor import set_enabled, update_dexscreener, update_strategy
 
     try:
         body = await request.json()
@@ -368,6 +368,8 @@ async def handle_config_update(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "error": "Expected {file, ...}"}, status=400)
     try:
         result: dict[str, Any] = {"ok": True, "file": name}
+        if "enabled" in body:
+            result["enabled"] = set_enabled(name, bool(body["enabled"]))
         if body.get("trade"):
             result["trade"] = update_strategy(name, body["trade"])["trade"]
         if body.get("dexscreener"):

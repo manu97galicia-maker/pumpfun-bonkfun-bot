@@ -464,7 +464,7 @@ function renderActiveOrders() {
     const s = orderSummary(c), on = c.enabled;
     return `<div class="order-item">
       <div class="order-head"><span class="sym">${c.bot_name}</span> <span class="chip ${c.platform === "lets_bonk" ? "lb" : "pf"}">${s.platform}</span>
-        <span class="pill ${on ? "on" : "off"}" style="margin-left:auto">${on ? "ACTIVO" : "OFF"}</span></div>
+        <button class="pill ${on ? "on" : "off"}" style="margin-left:auto;cursor:pointer;font-family:inherit" onclick="toggleStrategy('${c.name}', ${!on})">${on ? "● ACTIVO" : "○ OFF"}</button></div>
       <div class="order-line">🛒 Compra <b>${s.buy}</b></div>
       <div class="order-line">🔎 Filtro: <b>${s.filtStr}</b></div>
       <div class="order-line">🎯 Salida: <b>${s.tpStr}</b> · <b>${s.sl}</b></div>
@@ -494,6 +494,15 @@ function loadConfig() {
   document.getElementById("strat-grid").dataset.loaded = "1";
   document.getElementById("strat-out").textContent = "";
 }
+async function toggleStrategy(name, enabled) {
+  try {
+    const r = await fetch("/api/config", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ file: name, enabled }) });
+    const j = await r.json();
+    if (j.ok) { await loadConfigsForce(); if (botRunning) alert("Cambio guardado. Reinicia el bot (STOP → START) para que aplique."); }
+    else alert(j.error || "error");
+  } catch (e) { alert("" + e); }
+}
+
 async function saveStrategy() {
   const c = currentCfg(); if (!c) return;
   const inputs = document.querySelectorAll("#strat-grid input");
