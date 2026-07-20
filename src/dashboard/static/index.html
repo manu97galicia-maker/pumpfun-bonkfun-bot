@@ -6,17 +6,9 @@
 <title>SNIPER BOT // control deck</title>
 <style>
   :root {
-    --bg: #05070d;
-    --panel: #0b1020;
-    --panel-2: #0e1530;
-    --line: #1d2b52;
-    --ink: #cdd9ff;
-    --dim: #6b7bb0;
-    --cyan: #33e6ff;
-    --green: #3fff9f;
-    --red: #ff4d6d;
-    --amber: #ffd166;
-    --violet: #9b7bff;
+    --bg: #05070d; --panel: #0b1020; --panel-2: #0e1530; --line: #1d2b52;
+    --ink: #cdd9ff; --dim: #6b7bb0; --cyan: #33e6ff; --green: #3fff9f;
+    --red: #ff4d6d; --amber: #ffd166; --violet: #9b7bff;
     --glow: 0 0 12px rgba(51, 230, 255, .35);
   }
   * { box-sizing: border-box; }
@@ -28,102 +20,100 @@
       var(--bg);
     color: var(--ink);
     font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
-    font-size: 13px;
-    line-height: 1.45;
+    font-size: 13px; line-height: 1.45;
   }
   a { color: var(--cyan); text-decoration: none; }
   .wrap { max-width: 1360px; margin: 0 auto; padding: 18px; }
 
-  /* Header */
   header {
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
     border: 1px solid var(--line); background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border-radius: 14px; padding: 14px 18px; box-shadow: var(--glow);
+    border-radius: 14px 14px 0 0; padding: 14px 18px; box-shadow: var(--glow); border-bottom: none;
   }
   .logo { display: flex; align-items: center; gap: 12px; }
-  .bot {
-    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
-    background: #08122b; border: 1px solid var(--line); font-size: 22px; box-shadow: inset 0 0 14px rgba(51,230,255,.25);
-  }
-  .title b { letter-spacing: 2px; }
-  .title small { color: var(--dim); letter-spacing: 3px; text-transform: uppercase; font-size: 10px; }
-  .live { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--dim); }
+  .bot { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: #08122b; border: 1px solid var(--line); font-size: 22px; box-shadow: inset 0 0 14px rgba(51,230,255,.25); }
+  .title b { letter-spacing: 2px; } .title small { color: var(--dim); letter-spacing: 3px; text-transform: uppercase; font-size: 10px; }
+  .status { margin-left: auto; display: flex; align-items: center; gap: 18px; color: var(--dim); font-size: 11px; }
+  .status .item b { color: var(--ink); font-weight: 600; }
+  .conn { display: flex; align-items: center; gap: 8px; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.4s infinite; }
+  .dot.off { background: var(--red); box-shadow: 0 0 10px var(--red); animation: none; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
 
-  /* KPI / results zone */
-  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 14px 0; }
+  /* status strip below header */
+  .strip { display:flex; gap:0; border:1px solid var(--line); border-top:none; border-radius:0 0 14px 14px; overflow:hidden; margin-bottom:14px; }
+  .strip .cell { flex:1; padding:10px 14px; border-right:1px solid var(--line); background: var(--panel); }
+  .strip .cell:last-child { border-right:none; }
+  .strip .k { color: var(--dim); font-size: 10px; letter-spacing:1.5px; text-transform:uppercase; }
+  .strip .v { font-size: 18px; font-weight:700; margin-top:2px; font-variant-numeric: tabular-nums; }
+
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 0 0 14px; }
   .kpi { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 12px 14px; position: relative; overflow: hidden; }
   .kpi::after { content:""; position:absolute; inset:0; background: linear-gradient(180deg, rgba(51,230,255,.06), transparent 45%); pointer-events:none; }
   .kpi .k { color: var(--dim); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; }
-  .kpi .v { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .kpi .v { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .kpi .s { color: var(--dim); font-size: 11px; }
   .pos { color: var(--green); } .neg { color: var(--red); } .muted { color: var(--dim); }
 
-  /* Grid */
-  .grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
-  .col { display: flex; flex-direction: column; gap: 14px; }
   .card { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; overflow: hidden; }
-  .card > h2 {
-    margin: 0; padding: 11px 14px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan);
-    border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--panel-2), transparent); display:flex; align-items:center; gap:8px;
-  }
+  .card > h2 { margin: 0; padding: 11px 14px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan);
+    border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--panel-2), transparent); display:flex; align-items:center; gap:8px; }
   .card > h2 .tag { margin-left:auto; color: var(--dim); font-size: 10px; letter-spacing: 1px; }
   .body { padding: 6px 8px 10px; max-height: 340px; overflow-y: auto; }
   .body.tall { max-height: 460px; }
 
+  .equity { margin-bottom: 14px; }
+  .equity .body { max-height: none; padding: 12px 14px; }
+  #equity { width: 100%; display: block; }
+
+  .grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 6px 8px; white-space: nowrap; }
   th { color: var(--dim); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; position: sticky; top: 0; background: var(--panel); }
-  tbody tr { border-top: 1px solid #121a33; }
-  tbody tr:hover { background: #0d1530; }
-  .sym { color: #fff; font-weight: 700; }
-  .mint { color: var(--dim); font-size: 11px; }
+  tbody tr { border-top: 1px solid #121a33; } tbody tr:hover { background: #0d1530; }
+  .sym { color: #fff; font-weight: 700; } .mint { color: var(--dim); font-size: 11px; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .chip { display:inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; border:1px solid var(--line); color: var(--dim); }
-  .chip.pf { color: var(--green); border-color: #17482f; }
-  .chip.lb { color: var(--amber); border-color: #4a3d14; }
+  .chip.pf { color: var(--green); border-color: #17482f; } .chip.lb { color: var(--amber); border-color: #4a3d14; }
 
-  /* live feed rows */
-  .feed-row { display:flex; align-items:center; gap:10px; padding:8px; border-top:1px solid #121a33; animation: flash 1.2s ease-out; }
-  @keyframes flash { from { background: rgba(63,255,159,.14); } to { background: transparent; } }
+  .feed-row { display:flex; align-items:center; gap:10px; padding:8px; border-top:1px solid #121a33; }
+  .feed-row.fresh { animation: flash 1.4s ease-out; }
+  @keyframes flash { from { background: rgba(63,255,159,.16); } to { background: transparent; } }
   .feed-row .price { margin-left:auto; text-align:right; }
 
-  /* alerts */
   .alert { display:flex; gap:8px; padding:8px 12px; border-top:1px solid #121a33; align-items:flex-start; }
-  .alert .b { width:6px; align-self:stretch; border-radius:4px; }
+  .alert .b { width:6px; align-self:stretch; border-radius:4px; min-height:20px; }
   .alert.danger .b { background: var(--red); } .alert.good .b { background: var(--green); } .alert.info .b { background: var(--cyan); }
   .alert.danger { color:#ffd9e0; } .alert.good { color:#d6ffe9; }
 
-  /* forms */
   .form { padding: 12px 14px; display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .form label { display:flex; flex-direction:column; gap:4px; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing:1px; }
-  input, select {
-    background:#070c1c; border:1px solid var(--line); color: var(--ink); border-radius:8px; padding:8px 10px; font-family:inherit; font-size:13px;
-  }
+  input, select { background:#070c1c; border:1px solid var(--line); color: var(--ink); border-radius:8px; padding:8px 10px; font-family:inherit; font-size:13px; }
   input:focus, select:focus { outline:none; border-color: var(--cyan); box-shadow: var(--glow); }
-  .btn {
-    background: linear-gradient(180deg, #12325a, #0c1f3d); color:#eaf6ff; border:1px solid #24507f; border-radius:8px;
-    padding:9px 14px; font-family:inherit; font-size:12px; letter-spacing:1px; text-transform:uppercase; cursor:pointer;
-  }
+  .btn { background: linear-gradient(180deg, #12325a, #0c1f3d); color:#eaf6ff; border:1px solid #24507f; border-radius:8px;
+    padding:9px 14px; font-family:inherit; font-size:12px; letter-spacing:1px; text-transform:uppercase; cursor:pointer; }
   .btn:hover { border-color: var(--cyan); box-shadow: var(--glow); }
+  .btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
   .btn.warn { background: linear-gradient(180deg, #4a1526, #2c0d18); border-color:#7d2740; color:#ffd9e0; }
   .full { grid-column: 1 / -1; }
   .analysis-out { padding: 4px 14px 14px; }
-  .big-net { font-size: 26px; font-weight: 800; }
+  .big-net { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .kv { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed #17203f; color: var(--dim); }
-  .kv b { color: var(--ink); }
+  .kv b { color: var(--ink); font-variant-numeric: tabular-nums; }
 
-  /* wallet */
   .wallet { padding: 12px 14px; display:flex; flex-direction:column; gap:12px; }
   .addr { display:flex; gap:8px; align-items:center; background:#070c1c; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
   .addr code { color: var(--cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
-  .bal { font-size: 30px; font-weight: 800; }
+  .bal { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .note { color: var(--dim); font-size: 11px; }
   .danger-note { color: var(--amber); font-size: 11px; border-left:3px solid var(--amber); padding-left:8px; }
   .empty { color: var(--dim); text-align:center; padding: 22px; }
 
-  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .form { grid-template-columns:1fr; } }
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .form { grid-template-columns:1fr; } .strip { flex-wrap:wrap; } .strip .cell { min-width:50%; } }
+  @media (prefers-reduced-motion: reduce) { .dot, .feed-row.fresh { animation: none; } }
 </style>
 </head>
 <body>
@@ -131,71 +121,57 @@
   <header>
     <div class="logo">
       <div class="bot">🤖</div>
-      <div class="title">
-        <b>SNIPER BOT</b> · CONTROL DECK<br />
-        <small>pump.fun / letsbonk · dexscreener-aware</small>
-      </div>
+      <div class="title"><b>SNIPER BOT</b> · CONTROL DECK<br /><small>pump.fun / letsbonk · dexscreener-aware</small></div>
     </div>
-    <div class="live"><span class="dot"></span> LIVE <span id="clock" class="muted"></span></div>
+    <div class="status">
+      <div class="item">actualizado<br><b id="last-update">—</b></div>
+      <div class="item">refresco<br><b id="countdown">—</b></div>
+      <div class="conn"><span class="dot" id="conn-dot"></span> <b id="conn-text">LIVE</b></div>
+    </div>
   </header>
 
-  <!-- RESULTS ZONE -->
+  <div class="strip" id="strip"></div>
+
   <section class="kpis" id="kpis"></section>
+
+  <section class="card equity">
+    <h2>◠ Curva de P&L acumulado (cerradas) <span class="tag" id="equity-tag"></span></h2>
+    <div class="body"><canvas id="equity" height="130"></canvas></div>
+  </section>
 
   <div class="grid">
     <div class="col">
-      <!-- LIVE BUYS -->
       <div class="card">
         <h2>◉ Monedas compradas — en directo <span class="tag" id="buys-tag"></span></h2>
         <div class="body" id="live-buys"><div class="empty">esperando compras…</div></div>
       </div>
-
-      <!-- OPEN POSITIONS -->
       <div class="card">
         <h2>▣ Posiciones abiertas <span class="tag" id="open-tag"></span></h2>
         <div class="body tall" id="open-positions"><div class="empty">sin posiciones abiertas</div></div>
       </div>
-
-      <!-- CLOSED / HISTORY -->
       <div class="card">
         <h2>⤢ Cerradas (historial) <span class="tag" id="closed-tag"></span></h2>
         <div class="body" id="closed-positions"><div class="empty">sin historial</div></div>
       </div>
     </div>
-
     <div class="col">
-      <!-- ALERTS -->
       <div class="card">
         <h2>⚠ Avisos</h2>
         <div class="body" id="alerts"><div class="empty">sin avisos</div></div>
       </div>
-
-      <!-- STRATEGY ANALYSIS -->
       <div class="card">
         <h2>∿ Análisis de estrategias</h2>
         <form class="form" id="analysis-form">
-          <label>Etiqueta
-            <input name="label" value="dex boost 500" />
-          </label>
-          <label>Coste por moneda (SOL)
-            <input name="cost_per_coin_sol" type="number" step="0.0000001" value="0.0005" />
-          </label>
+          <label>Etiqueta<input name="label" value="dex boost 500" /></label>
+          <label>Coste por moneda (SOL)<input name="cost_per_coin_sol" type="number" step="0.0000001" value="0.0005" /></label>
           <label>Plataforma
-            <select name="platform">
-              <option value="">todas</option>
-              <option value="pump_fun">pump_fun</option>
-              <option value="lets_bonk">lets_bonk</option>
-            </select>
+            <select name="platform"><option value="">todas</option><option value="pump_fun">pump_fun</option><option value="lets_bonk">lets_bonk</option></select>
           </label>
-          <label>Inversión mínima (SOL)
-            <input name="min_invested_sol" type="number" step="0.0000001" value="0" />
-          </label>
+          <label>Inversión mínima (SOL)<input name="min_invested_sol" type="number" step="0.0000001" value="0" /></label>
           <button class="btn full" type="submit">▶ Estudiar estrategia</button>
         </form>
         <div class="analysis-out" id="analysis-out"><div class="note">Introduce parámetros y pulsa estudiar. Ej: “rentabilidad media por moneda tras pagar dex boost 500”.</div></div>
       </div>
-
-      <!-- WALLET -->
       <div class="card">
         <h2>◈ Wallet · depósito / retiro</h2>
         <div class="wallet" id="wallet"><div class="note">cargando wallet…</div></div>
@@ -204,42 +180,96 @@
   </div>
 
   <p class="note" style="text-align:center;margin:16px 0">
-    Panel local (127.0.0.1) · datos derivados de <code>trades/trades.log</code> y del RPC · trading real lo ejecuta el bot.
+    Panel local (127.0.0.1) · datos derivados de <code>trades/trades.log</code> y del RPC · el trading real lo ejecuta el bot.
   </p>
 </div>
 
 <script>
+const REFRESH_MS = 4000;
+let lastOk = 0, connected = false, seenBuys = new Set();
+
 const fmtSol = (v) => (v === null || v === undefined) ? "—" : (Math.abs(v) < 1e-6 && v !== 0 ? v.toExponential(2) : Number(v).toFixed(6));
 const fmtPct = (v) => (v === null || v === undefined) ? "—" : (v >= 0 ? "+" : "") + Number(v).toFixed(1) + "%";
 const cls = (v) => v > 0 ? "pos" : (v < 0 ? "neg" : "muted");
 const short = (m) => m ? m.slice(0,4) + "…" + m.slice(-4) : "";
 const plat = (p) => p === "lets_bonk" ? '<span class="chip lb">bonk</span>' : '<span class="chip pf">pump</span>';
-const when = (t) => t ? new Date(t).toLocaleTimeString() : "";
 const sx = (m) => `https://solscan.io/token/${m}`;
+function ago(ts) {
+  if (!ts) return "";
+  const s = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime())/1000));
+  if (s < 60) return "hace " + s + "s";
+  if (s < 3600) return "hace " + Math.floor(s/60) + "m";
+  return "hace " + Math.floor(s/3600) + "h";
+}
 
-function renderKpis(r) {
+function renderStrip(r) {
+  const cells = [
+    { k: "Resultado neto", v: fmtSol(r.total_realized_sol) + " SOL", c: cls(r.total_realized_sol) },
+    { k: "ROI", v: fmtPct(r.roi_pct), c: cls(r.roi_pct) },
+    { k: "Win rate", v: Number(r.win_rate_pct).toFixed(0) + "%", c: r.win_rate_pct >= 50 ? "pos" : "neg" },
+    { k: "Abiertas", v: r.open_count + " · " + fmtSol(r.open_invested_sol) + " SOL", c: "muted" },
+    { k: "Cerradas", v: r.closed_count + " (" + r.wins + "W/" + r.losses + "L)", c: "muted" },
+  ];
+  document.getElementById("strip").innerHTML = cells.map(c =>
+    `<div class="cell"><div class="k">${c.k}</div><div class="v ${c.c}">${c.v}</div></div>`).join("");
+}
+
+function renderKpis(r, best, worst) {
   const items = [
-    { k: "Resultado neto", v: fmtSol(r.total_realized_sol) + " SOL", c: cls(r.total_realized_sol), s: "ROI " + fmtPct(r.roi_pct) },
     { k: "Media / moneda", v: fmtSol(r.avg_pnl_per_coin_sol) + " SOL", c: cls(r.avg_pnl_per_coin_sol), s: r.closed_count + " cerradas" },
-    { k: "Win rate", v: Number(r.win_rate_pct).toFixed(0) + "%", c: r.win_rate_pct >= 50 ? "pos" : "neg", s: r.wins + "W / " + r.losses + "L" },
-    { k: "Abiertas", v: r.open_count, c: "muted", s: fmtSol(r.open_invested_sol) + " SOL exp." },
-    { k: "Invertido", v: fmtSol(r.total_invested_sol) + " SOL", c: "muted", s: "acumulado" },
+    { k: "Invertido total", v: fmtSol(r.total_invested_sol) + " SOL", c: "muted", s: "acumulado" },
+    { k: "Mejor trade", v: best ? best.symbol : "—", c: "pos", s: best ? fmtSol(best.realized_pnl_sol)+" SOL" : "" },
+    { k: "Peor trade", v: worst ? worst.symbol : "—", c: "neg", s: worst ? fmtSol(worst.realized_pnl_sol)+" SOL" : "" },
+    { k: "Exposición abierta", v: fmtSol(r.open_invested_sol) + " SOL", c: "muted", s: r.open_count + " posiciones" },
   ];
   document.getElementById("kpis").innerHTML = items.map(i =>
-    `<div class="kpi"><div class="k">${i.k}</div><div class="v ${i.c}">${i.v}</div><div class="s">${i.s}</div></div>`
-  ).join("");
+    `<div class="kpi"><div class="k">${i.k}</div><div class="v ${i.c}">${i.v}</div><div class="s">${i.s}</div></div>`).join("");
+}
+
+function drawEquity(closed) {
+  const cv = document.getElementById("equity"); if (!cv) return;
+  const rows = closed.filter(p => p.exit_time).slice().sort((a,b) => a.exit_time > b.exit_time ? 1 : -1);
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || cv.parentElement.clientWidth, h = 130;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  document.getElementById("equity-tag").textContent = rows.length ? rows.length + " trades" : "";
+  if (!rows.length) { ctx.fillStyle = "#6b7bb0"; ctx.font = "12px monospace"; ctx.fillText("sin trades cerrados", 12, h/2); return; }
+  let cum = 0; const pts = [{i:0, v:0}];
+  rows.forEach((p, idx) => { cum += p.realized_pnl_sol; pts.push({ i: idx+1, v: cum }); });
+  const vals = pts.map(p => p.v), min = Math.min(0, ...vals), max = Math.max(0, ...vals), pad = 10;
+  const plotW = w - pad*2, plotH = h - pad*2;
+  const X = i => pad + (pts.length <= 1 ? 0 : i/(pts.length-1)*plotW);
+  const Y = v => pad + (max === min ? plotH/2 : (1-(v-min)/(max-min))*plotH);
+  const up = cum >= 0, color = up ? "#3fff9f" : "#ff4d6d";
+  // zero line
+  ctx.strokeStyle = "rgba(107,123,176,.35)"; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(pad, Y(0)); ctx.lineTo(w-pad, Y(0)); ctx.stroke(); ctx.setLineDash([]);
+  // area
+  const g = ctx.createLinearGradient(0, pad, 0, h-pad);
+  g.addColorStop(0, up ? "rgba(63,255,159,.28)" : "rgba(255,77,109,.28)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.beginPath(); ctx.moveTo(X(0), Y(0)); pts.forEach(p => ctx.lineTo(X(p.i), Y(p.v)));
+  ctx.lineTo(X(pts[pts.length-1].i), Y(0)); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+  // line
+  ctx.beginPath(); pts.forEach((p, idx) => idx ? ctx.lineTo(X(p.i), Y(p.v)) : ctx.moveTo(X(p.i), Y(p.v)));
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+  // endpoint
+  const last = pts[pts.length-1];
+  ctx.beginPath(); ctx.arc(X(last.i), Y(last.v), 3.5, 0, 7); ctx.fillStyle = color; ctx.fill();
+  ctx.fillStyle = color; ctx.font = "bold 12px monospace"; ctx.textAlign = "right";
+  ctx.fillText(fmtSol(cum) + " SOL", w-pad, Y(last.v) < 20 ? Y(last.v)+16 : Y(last.v)-8); ctx.textAlign = "left";
 }
 
 function renderLiveBuys(rows) {
   document.getElementById("buys-tag").textContent = rows.length ? rows.length + " recientes" : "";
   const el = document.getElementById("live-buys");
   if (!rows.length) { el.innerHTML = '<div class="empty">esperando compras…</div>'; return; }
-  el.innerHTML = rows.map(b => `
-    <div class="feed-row">
-      <span class="sym">${b.symbol}</span> ${plat(b.platform)}
+  el.innerHTML = rows.map(b => {
+    const fresh = b.tx_hash && !seenBuys.has(b.tx_hash) ? " fresh" : "";
+    return `<div class="feed-row${fresh}"><span class="sym">${b.symbol}</span> ${plat(b.platform)}
       <a class="mint" href="${sx(b.mint)}" target="_blank">${short(b.mint)}</a>
-      <span class="price"><b>${fmtSol(b.spent_sol)} SOL</b><br><span class="muted">${when(b.timestamp)}</span></span>
-    </div>`).join("");
+      <span class="price"><b>${fmtSol(b.spent_sol)} SOL</b><br><span class="muted">${ago(b.timestamp)}</span></span></div>`;
+  }).join("");
+  rows.forEach(b => b.tx_hash && seenBuys.add(b.tx_hash));
 }
 
 function posTable(rows, closed) {
@@ -249,17 +279,13 @@ function posTable(rows, closed) {
     : `<tr><th>moneda</th><th>plat</th><th class="num">invertido</th><th class="num">compras</th><th>entrada</th></tr>`;
   const body = rows.map(p => closed
     ? `<tr><td><span class="sym">${p.symbol}</span> <a class="mint" href="${sx(p.mint)}" target="_blank">${short(p.mint)}</a></td>
-         <td>${plat(p.platform)}</td>
-         <td class="num">${fmtSol(p.invested_sol)}</td>
+         <td>${plat(p.platform)}</td><td class="num">${fmtSol(p.invested_sol)}</td>
          <td class="num ${cls(p.realized_pnl_sol)}">${fmtSol(p.realized_pnl_sol)}</td>
          <td class="num ${cls(p.realized_pnl_sol)}">${fmtPct(p.realized_pnl_pct)}</td>
          <td class="num muted">${p.hold_seconds !== null ? p.hold_seconds.toFixed(0)+"s" : "—"}</td></tr>`
     : `<tr><td><span class="sym">${p.symbol}</span> <a class="mint" href="${sx(p.mint)}" target="_blank">${short(p.mint)}</a></td>
-         <td>${plat(p.platform)}</td>
-         <td class="num">${fmtSol(p.invested_sol)}</td>
-         <td class="num">${p.n_buys}</td>
-         <td class="muted">${when(p.entry_time)}</td></tr>`
-  ).join("");
+         <td>${plat(p.platform)}</td><td class="num">${fmtSol(p.invested_sol)}</td>
+         <td class="num">${p.n_buys}</td><td class="muted">${ago(p.entry_time)}</td></tr>`).join("");
   return `<table>${head}${body}</table>`;
 }
 
@@ -274,30 +300,17 @@ function renderWallet(w) {
   if (!w || !w.configured) { el.innerHTML = '<div class="note">Wallet no configurada (SOLANA_PRIVATE_KEY ausente en .env).</div>'; return; }
   const wd = w.withdraw_enabled;
   el.innerHTML = `
-    <div>
-      <div class="note">Balance</div>
-      <div class="bal ${w.balance_sol === null ? "muted" : ""}">${w.balance_sol === null ? "RPC n/d" : Number(w.balance_sol).toFixed(4)} <span class="note">SOL</span></div>
-    </div>
-    <div>
-      <div class="note">Dirección de depósito (envía SOL aquí)</div>
-      <div class="addr"><code id="wa">${w.address}</code><button class="btn" onclick="navigator.clipboard.writeText('${w.address}')">copiar</button></div>
-    </div>
-    <div>
-      <div class="note">Retirar SOL</div>
+    <div><div class="note">Balance</div><div class="bal ${w.balance_sol === null ? "muted" : ""}">${w.balance_sol === null ? "RPC n/d" : Number(w.balance_sol).toFixed(4)} <span class="note">SOL</span></div></div>
+    <div><div class="note">Dirección de depósito (envía SOL aquí)</div>
+      <div class="addr"><code id="wa">${w.address}</code><button class="btn" onclick="navigator.clipboard.writeText('${w.address}')">copiar</button></div></div>
+    <div><div class="note">Retirar SOL (reserva fija 0.03 SOL)</div>
       <div class="form" style="padding:8px 0">
-        <label class="full">Destino
-          <input id="wd-dest" placeholder="pubkey de destino" ${wd ? "" : "disabled"} />
-        </label>
-        <label>Cantidad (SOL)
-          <input id="wd-amt" type="number" step="0.0001" placeholder="0.0" ${wd ? "" : "disabled"} />
-        </label>
-        <button class="btn warn" ${wd ? "" : "disabled"} onclick="doWithdraw()">⤴ retirar</button>
-      </div>
-      ${wd
-        ? '<div class="danger-note">Movimiento de fondos REAL activado. Revisa destino y cantidad antes de confirmar.</div>'
-        : '<div class="note">Retiro desactivado. Actívalo con <code>DASHBOARD_ALLOW_WITHDRAW=true</code> (solo local).</div>'}
-      <div id="wd-result" class="note"></div>
-    </div>`;
+        <label class="full">Destino<input id="wd-dest" placeholder="pubkey de destino" ${wd ? "" : "disabled"} /></label>
+        <label>Cantidad (SOL)<input id="wd-amt" type="number" step="0.0001" placeholder="0.0" ${wd ? "" : "disabled"} /></label>
+        <button class="btn warn" ${wd ? "" : "disabled"} onclick="doWithdraw()">⤴ retirar</button></div>
+      ${wd ? '<div class="danger-note">Movimiento de fondos REAL activado. Revisa destino y cantidad.</div>'
+           : '<div class="note">Retiro desactivado. Actívalo con <code>DASHBOARD_ALLOW_WITHDRAW=true</code>.</div>'}
+      <div id="wd-result" class="note"></div></div>`;
 }
 
 async function doWithdraw() {
@@ -314,11 +327,19 @@ async function doWithdraw() {
   } catch (e) { out.innerHTML = `<span class="neg">${e}</span>`; }
 }
 
+function setConn(ok) {
+  connected = ok;
+  document.getElementById("conn-dot").className = "dot" + (ok ? "" : " off");
+  document.getElementById("conn-text").textContent = ok ? "LIVE" : "SIN CONEXIÓN";
+}
+
 async function tick() {
-  document.getElementById("clock").textContent = new Date().toLocaleTimeString();
   try {
     const r = await fetch("/api/state"); const s = await r.json();
-    renderKpis(s.results);
+    setConn(true); lastOk = Date.now();
+    renderStrip(s.results);
+    renderKpis(s.results, s.results.best, s.results.worst);
+    drawEquity(s.closed_positions);
     renderLiveBuys(s.live_buys);
     document.getElementById("open-tag").textContent = s.open_positions.length || "";
     document.getElementById("open-positions").innerHTML = posTable(s.open_positions, false);
@@ -326,18 +347,21 @@ async function tick() {
     document.getElementById("closed-positions").innerHTML = posTable(s.closed_positions, true);
     renderAlerts(s.alerts);
     renderWallet(s.wallet);
-  } catch (e) { /* keep last render */ }
+  } catch (e) { setConn(false); }
+}
+
+function heartbeat() {
+  const sinceOk = lastOk ? Math.floor((Date.now() - lastOk)/1000) : null;
+  document.getElementById("last-update").textContent = sinceOk === null ? "—" : (sinceOk === 0 ? "ahora" : "hace " + sinceOk + "s");
+  const next = Math.max(0, Math.ceil((REFRESH_MS - (Date.now() - lastOk)) / 1000));
+  document.getElementById("countdown").textContent = connected ? next + "s" : "reintentando…";
 }
 
 document.getElementById("analysis-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = new FormData(ev.target);
-  const params = {
-    label: f.get("label"),
-    cost_per_coin_sol: parseFloat(f.get("cost_per_coin_sol")) || 0,
-    platform: f.get("platform") || null,
-    min_invested_sol: parseFloat(f.get("min_invested_sol")) || 0,
-  };
+  const params = { label: f.get("label"), cost_per_coin_sol: parseFloat(f.get("cost_per_coin_sol")) || 0,
+    platform: f.get("platform") || null, min_invested_sol: parseFloat(f.get("min_invested_sol")) || 0 };
   const out = document.getElementById("analysis-out");
   out.innerHTML = '<div class="note">calculando…</div>';
   const r = await fetch("/api/analysis", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(params) });
@@ -354,7 +378,9 @@ document.getElementById("analysis-form").addEventListener("submit", async (ev) =
 });
 
 tick();
-setInterval(tick, 4000);
+setInterval(tick, REFRESH_MS);
+setInterval(heartbeat, 1000);
+window.addEventListener("resize", () => { /* redraw handled next tick */ });
 </script>
 </body>
 </html>
